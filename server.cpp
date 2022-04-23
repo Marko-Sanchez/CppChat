@@ -104,7 +104,6 @@ int main(int argc, char* argv[])
             if(cli != 0)
             {
                 FD_SET(cli, &socketset);
-                std::cout << cli << std::endl;
                 maxFD = std::max(maxFD, cli);
             }
 
