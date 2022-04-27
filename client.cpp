@@ -34,11 +34,13 @@ const struct Colors{
  *
  * @output: sends message to server.
  */
-void clientInput(const int serverFD, const int pfdWrite)
+void clientInput(const int serverFD, const int pipe[])
 {
     char buffer[BUFFER_SIZE] = {0};
     int flags{0};
     ssize_t bytes{0};
+
+    int pfdWrite{pipe[1]};
 
     std::cout << "> ";
 
@@ -51,8 +53,8 @@ void clientInput(const int serverFD, const int pfdWrite)
 
         if(bytes <= 0)
         {
-            write(pfdWrite, buffer, 0); // write to self, to close connection:
-            close(pfdWrite);            // close write end of pipe:
+            send(pfdWrite, buffer, 0, flags); // write to self, to close connection:
+            close(pfdWrite);                  // close write end of pipe:
             break;
         }
 
@@ -77,11 +79,10 @@ void chat(const int serverFD)
     ssize_t bytes{0};
 
     // output server response:
-    bytes = recv(serverFD,  &buffer, sizeof(buffer), flags);
+    bytes = recv(serverFD,  &buffer, BUFFER_SIZE, flags);
     std::cout << color.sMsg << buffer << color.end << std::endl;
 
-    fd_set socketset;
-    pid_t childpid;
+    fd_set readfd;
     int pipefd[2];
 
     // establish pipe to write to self:
@@ -94,60 +95,49 @@ void chat(const int serverFD)
     }
 
     // task for processsing user input:
-    auto ft = std::async(std::launch::async, clientInput, serverFD, pipefd[1]);
+    auto ft = std::async(std::launch::async, clientInput, serverFD, pipefd);
 
-    int nfds{std::max(serverFD, pipefd[0]) + 1};
-
-    // make shared memory:
-    int memID = shmget(IPC_PRIVATE, sizeof(bool), IPC_CREAT|0666);
-    bool *ptr = static_cast<bool*>(shmat(memID, nullptr, 0));
-    *ptr = true;
-
-    while(*ptr)
+    while(true)
     {
 
-        FD_ZERO(&socketset);
-        FD_SET(serverFD, &socketset);
-        FD_SET(pipefd[0], &socketset);
+        FD_ZERO(&readfd);
+        FD_SET(serverFD, &readfd);
+        FD_SET(pipefd[0], &readfd);
 
+        int nfds{std::max(serverFD, pipefd[0]) + 1};
 
         // listen for activity from server and self:
-        int ready{select(nfds, &socketset, nullptr, nullptr, nullptr)};
+        int ready{select(nfds, &readfd, nullptr, nullptr, nullptr)};
 
-        if(ready <= 0)
+        if(ready < 0)
         {
             std::cerr << color.error << "server error" << color.end << std::endl;
             break;
         }
-        else if(FD_ISSET(pipefd[0], &socketset))
+
+        if(FD_ISSET(pipefd[0], &readfd))
         {
-            send(serverFD, buffer, 0, flags);// send 0 bytes to server, indicating closure:
+            // send 0 bytes to server, indicating closure:
+            send(serverFD, buffer, 0, flags);
 
             std::cout << color.warning << "closing connection to server" << color.end << std::endl;
             break;
         }
-        else if(FD_ISSET(serverFD, &socketset))
-        {
-            // output server response, in a child process:
-            if((*ptr == true) && (childpid = fork()) == 0)
-            {
-                bytes = recv(serverFD, &buffer, BUFFER_SIZE, flags);
-                if(bytes <= 0)
-                {
-                    *ptr = false;
-                    std::cout << color.warning << "server has disconnected" << color.end << std::endl;
-                }else
-                {
-                    std::cout << "Server: " << buffer << std::endl;
-                    std::cout << "> ";
-                    std::flush(std::cout);
-                }
 
-                close(serverFD);
-                exit (0);
+        if(FD_ISSET(serverFD, &readfd))
+        {
+            bytes = recv(serverFD, &buffer, BUFFER_SIZE, flags);
+            if(bytes <= 0)
+            {
+                std::cout << color.warning << "server has disconnected" << color.end << std::endl;
+                break;
+            }else
+            {
+                std::cout << "server: " << buffer << std::endl;
+                std::cout << "> ";
+                std::flush(std::cout);
             }
         }
-        else{std::cout << "something else" << std::endl;}
 
         memset(buffer, 0, bytes);
     }
@@ -155,9 +145,6 @@ void chat(const int serverFD)
     close(pipefd[0]);        // close read end of pipe:
     close(pipefd[1]);        // close write end of pipe:
     close(serverFD);         // close socket to server:
-
-    shmdt(ptr);             // detach connection to shared memory:
-    shmctl(memID, IPC_RMID, nullptr);// destroy shared memory:
 }
 
 int main(int argc, char* argv[])

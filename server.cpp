@@ -85,10 +85,10 @@ int main(int argc, char* argv[])
     int currentConnections{0};
 
     char welcomeMsg[] = "Welcome to the Server!";
-    char response[] = "Message received\n";
     char buffer[BUFFER_SIZE] = {0};
+    int flags{0};
 
-    int testCounter{1};
+    int testCounter{0};
     while(true)
     {
 
@@ -112,8 +112,13 @@ int main(int argc, char* argv[])
         // listen for activity on all sockets in set range:
         int ready{select(maxFD + 1, &socketset, nullptr, nullptr, nullptr)};
 
+        if(ready < 0)
+        {
+            std::cerr << color.error << "server error" << color.end << std::endl;
+            break;
+        }
         // check if activity was caused by server or client:
-        if(FD_ISSET(server_fd, &socketset))
+        else if(FD_ISSET(server_fd, &socketset))
         {
 
             // if we have reached maxed connections do not accept:
@@ -134,7 +139,7 @@ int main(int argc, char* argv[])
                       << " ,there IP is: " << inet_ntoa(client.sin_addr) << color.end
                       << std::endl;
 
-            ssize_t bytes = send(incomingClient, welcomeMsg, sizeof(welcomeMsg), 0);
+            send(incomingClient, welcomeMsg, sizeof(welcomeMsg), flags);
 
             // add new client to set and container:
             FD_SET(incomingClient, &socketset);
@@ -151,7 +156,7 @@ int main(int argc, char* argv[])
             {
                 if(FD_ISSET( client, &socketset))
                 {
-                    ssize_t bytes = recv(client,  buffer, sizeof(buffer), 0);
+                    ssize_t bytes = recv(client,  buffer, sizeof(buffer), flags);
                     std::cout << "number of bytes read: " << bytes << std::endl;
 
                     // dicsonect if no bytes were sent, else output message to terminal:
@@ -173,14 +178,16 @@ int main(int argc, char* argv[])
                         // welcome new client to the server: pusedo reply testing
                         if(testCounter == 3)
                         {
-                            bytes = send(client, welcomeMsg, sizeof(welcomeMsg), 0);
-                            std::cout << "Msg sent: " << bytes << std::endl;
+                            bytes = send(client, welcomeMsg, sizeof(welcomeMsg), flags);
+                            sleep(1);
+                            bytes = send(client, welcomeMsg, sizeof(welcomeMsg), flags);
+                            sleep(1);
+                            bytes = send(client, welcomeMsg, sizeof(welcomeMsg), flags);
                         }
                         testCounter = testCounter % 3;
 
                     }
 
-                    // clear buffer:
                     memset(buffer, 0, BUFFER_SIZE);
 
                 }
@@ -188,7 +195,7 @@ int main(int argc, char* argv[])
         }
 
         // no clients connected, stop listening:
-        if(currentConnections == 0)break;
+        /* if(currentConnections == 0)break; */
     }
 
     close(server_fd);
