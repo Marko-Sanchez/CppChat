@@ -1,9 +1,8 @@
 #include <iostream>
-#include <cstring>
-#include <cstdlib>
-#include <cstdio>
 #include <vector>
-#include <algorithm>
+#include <list>
+#include <map>
+#include <utility>
 
 #include <arpa/inet.h>
 #include <unistd.h>
@@ -74,21 +73,19 @@ int main(int argc, char* argv[])
 
     // client address container:
     struct sockaddr_in client;
-    socklen_t len{sizeof(client)};
+    socklen_t cli_len{sizeof(client)};
 
-    // monitor multiple file descriptors:
     fd_set socketset;
-    int max_connections{6};
+    const size_t max_connections{6};
 
-    // client file descriptor container:
-    std::vector<int> clients(max_connections, 0);
-    int currentConnections{0};
+    std::list< std::pair<int,std::string> > clients;      // client file descriptors:
+    std::map<std::string, int> userTable;                 // client names, client fd:
 
-    char welcomeMsg[] = "Welcome to the Server!";
-    char buffer[BUFFER_SIZE] = {0};
+
+    std::vector<uint8_t> buffer(BUFFER_SIZE, 0);
+    const std::string welcomeMsg{"Welcome to the Server, "};
     int flags{0};
 
-    int testCounter{0};
     while(true)
     {
 
@@ -99,14 +96,10 @@ int main(int argc, char* argv[])
         int maxFD{server_fd};
 
         // add all client sockets back to set:
-        for(const auto& cli: clients)
+        for(const auto& client: clients)
         {
-            if(cli != 0)
-            {
-                FD_SET(cli, &socketset);
-                maxFD = std::max(maxFD, cli);
-            }
-
+            FD_SET(client.first, &socketset);
+            maxFD = std::max(maxFD, client.first);
         }
 
         // listen for activity on all sockets in set range:
@@ -122,13 +115,13 @@ int main(int argc, char* argv[])
         {
 
             // if we have reached maxed connections do not accept:
-            if(currentConnections == max_connections)
+            if(clients.size() == max_connections)
             {
                 std::cout << color.warning << "max connections reached" << color.end << std::endl;
                 continue;
             }
 
-            int incomingClient{accept(server_fd, (struct sockaddr *)&client, (socklen_t *)&len)};
+            int incomingClient{accept(server_fd, (struct sockaddr *)&client, (socklen_t *)&cli_len)};
             if(incomingClient < 0)
             {
                 std::cerr << color.error << "unable to accept to client" << color.end << std::endl;
@@ -139,63 +132,79 @@ int main(int argc, char* argv[])
                       << " ,there IP is: " << inet_ntoa(client.sin_addr) << color.end
                       << std::endl;
 
-            send(incomingClient, welcomeMsg, sizeof(welcomeMsg), flags);
+            // welcome user to server:
 
-            // add new client to set and container:
-            FD_SET(incomingClient, &socketset);
+            auto bytes = recv(incomingClient, &buffer[0], BUFFER_SIZE, flags);
 
-            auto iter = find(begin(clients), end(clients), 0);
-            *iter = incomingClient;
+            std::string name{begin(buffer), begin(buffer) + bytes};
+            std::string stemp{welcomeMsg + name};
 
-            currentConnections++;
+            userTable[name] = incomingClient;
+
+            std::vector<uint8_t> temp(cbegin(stemp), cend(stemp));
+            auto len = static_cast<size_t>(temp.size());
+
+            send(incomingClient, &temp[0], len, flags);
+
+            // add client to container:
+            clients.emplace_back(std::make_pair(incomingClient, name));
 
         }else
         {
 
-            for(auto & client: clients)
+            for(auto iter = begin(clients); iter != end(clients); iter++)
             {
+
+                auto [client, name] = *iter;
+
                 if(FD_ISSET( client, &socketset))
                 {
-                    ssize_t bytes = recv(client,  buffer, sizeof(buffer), flags);
+
+                    ssize_t bytes = recv(client,  &buffer[0], BUFFER_SIZE, flags);
                     std::cout << "number of bytes read: " << bytes << std::endl;
 
-                    // dicsonect if no bytes were sent, else output message to terminal:
+                    std::string msg(cbegin(buffer), cbegin(buffer) + bytes);
+
+                    // disconnect if no bytes were sent, else output message to terminal:
                     if(bytes <= 0)
                     {
-                        std::cout << color.warning << "client no longer wants to talk" << color.end << std::endl;
+                        std::cout << color.warning << "client has disconnected..." << color.end << std::endl;
 
-                        // close client connection and remove from container:
                         close(client);
-                        client = 0;
-                        currentConnections--;
+                        userTable.erase(name);
+                        iter = clients.erase(iter--);
 
                     }else
                     {
-                        // output client response:
-                        std::cout << "client: " << buffer << std::endl;
-                        testCounter++;
 
-                        // welcome new client to the server: pusedo reply testing
-                        if(testCounter == 3)
+                        std::cout << "client->" << msg << std::endl;
+
+                        auto found = msg.find(':');
+
+                        // send msg to other client, else echo back:
+                        if(found != std::string::npos && userTable.find(msg.substr(0, found)) != end(userTable))
                         {
-                            bytes = send(client, welcomeMsg, sizeof(welcomeMsg), flags);
-                            sleep(1);
-                            bytes = send(client, welcomeMsg, sizeof(welcomeMsg), flags);
-                            sleep(1);
-                            bytes = send(client, welcomeMsg, sizeof(welcomeMsg), flags);
+                            std::string reciever{msg.substr(0, found)};
+                            auto clientFD = userTable[reciever];
+
+                            msg = name + msg.substr(found);
+
+                            std::vector<uint8_t> temp(cbegin(msg), cend(msg));
+                            auto len = static_cast<size_t>(temp.size());
+
+                            bytes = send(clientFD, &temp[0], len, flags);
+                        }else
+                        {
+                            bytes = send(client, &buffer[0], bytes, flags);
                         }
-                        testCounter = testCounter % 3;
 
                     }
 
-                    memset(buffer, 0, BUFFER_SIZE);
-
+                    std::fill(begin(buffer), end(buffer), 0);
                 }
+
             }
         }
-
-        // no clients connected, stop listening:
-        /* if(currentConnections == 0)break; */
     }
 
     close(server_fd);

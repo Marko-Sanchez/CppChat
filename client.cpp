@@ -1,7 +1,7 @@
 #include <cstring>
 #include <iostream>
 #include <string>
-#include <cstdlib>
+#include <vector>
 #include <cstdio>
 #include <future>
 
@@ -37,7 +37,7 @@ const struct Colors{
 void clientInput(const int serverFD, const int pipe[])
 {
     char buffer[BUFFER_SIZE] = {0};
-    int flags{0};
+    const int flags{0};
     ssize_t bytes{0};
 
     int pfdWrite{pipe[1]};
@@ -75,12 +75,13 @@ void chat(const int serverFD)
 {
 
     char buffer[BUFFER_SIZE] = {0};
-    int flags{0};
-    ssize_t bytes{0};
+    const int flags{0};
 
     // output server response:
-    bytes = recv(serverFD,  &buffer, BUFFER_SIZE, flags);
+    ssize_t bytes = recv(serverFD,  &buffer, BUFFER_SIZE, flags);
     std::cout << color.sMsg << buffer << color.end << std::endl;
+
+    memset(buffer, 0, bytes);
 
     fd_set readfd;
     int pipefd[2];
@@ -97,12 +98,12 @@ void chat(const int serverFD)
     // task for processsing user input:
     auto ft = std::async(std::launch::async, clientInput, serverFD, pipefd);
 
+    sleep(1);
     while(true)
     {
 
         FD_ZERO(&readfd);
-        FD_SET(serverFD, &readfd);
-        FD_SET(pipefd[0], &readfd);
+        FD_SET(serverFD, &readfd); FD_SET(pipefd[0], &readfd);
 
         int nfds{std::max(serverFD, pipefd[0]) + 1};
 
@@ -127,13 +128,14 @@ void chat(const int serverFD)
         if(FD_ISSET(serverFD, &readfd))
         {
             bytes = recv(serverFD, &buffer, BUFFER_SIZE, flags);
+
             if(bytes <= 0)
             {
                 std::cout << color.warning << "server has disconnected" << color.end << std::endl;
                 break;
             }else
             {
-                std::cout << "server: " << buffer << std::endl;
+                std::cout << buffer << std::endl;
                 std::cout << "> ";
                 std::flush(std::cout);
             }
@@ -149,6 +151,10 @@ void chat(const int serverFD)
 
 int main(int argc, char* argv[])
 {
+
+    std::cout << "enter username: ";
+    std::string userName;
+    getline(std::cin, userName);
 
     /* Setting up socket and connection to server */
 
@@ -177,6 +183,12 @@ int main(int argc, char* argv[])
     }
 
     std::cout << color.pass << "connected to server" << color.end << std::endl;
+
+    std::vector<uint8_t> temp(cbegin(userName), cend(userName));
+    auto len = static_cast<size_t>(temp.size());
+
+    // send user name to server:
+    send(server_fd, &temp[0], len, 0);
 
     chat(server_fd);
 

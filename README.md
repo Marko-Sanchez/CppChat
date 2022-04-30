@@ -4,6 +4,7 @@ Chatting service developed using TCP communications standard written in cpp.
 
 ## Objectives
 - [x] Make connections between server and client.
-- [ ] Make a peer-to-peer connection.
+- [x] Make a peer-to-peer connection (locally).
+- [ ] Make a peer-to-peer connection (from another machine?).
 - [ ] Build using cmake, for portability.
 - [ ] Test conection on a non-local connection.
