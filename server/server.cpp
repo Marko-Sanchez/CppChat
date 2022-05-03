@@ -13,7 +13,7 @@
 constexpr uint16_t PORT{8080};
 constexpr ssize_t BUFFER_SIZE{1024};
 
-/* Contianer for colored text values to output onto terminal */
+/* Container for colored text values to output onto terminal */
 const struct Colors{
 
     const std::string pass{"\033[0;32m"};
@@ -24,6 +24,11 @@ const struct Colors{
     const std::string end{"\033[0m"};
 
 }color;
+
+/* output logging to terminal */
+auto logP = [](std::string&& msg){std::cout << color.pass << msg << color.end << std::endl;};
+auto logE = [](std::string&& msg){std::cerr << color.error << msg << color.end << std::endl;};
+auto logW = [](std::string&& msg){std::cout << color.warning << msg << color.end << std::endl;};
 
 int main(int argc, char* argv[])
 {
@@ -36,17 +41,17 @@ int main(int argc, char* argv[])
 
     if(server_fd == 0)
     {
-        std::cerr << color.error << "socket connection failed" << color.end << std::endl;
+        logE("socket connection failed");
         return EXIT_FAILURE;
     }
 
-    std::cout << color.pass << "socket connected" << color.end << std::endl;
+    logP("socket connected");
 
     // Attach socket to port:
     int option{1};
     if(setsockopt(server_fd, SOL_SOCKET, SO_REUSEADDR | SO_REUSEPORT, &option, sizeof(option)))
     {
-        std::cerr << color.error << "error in setting socket options" << color.end << std::endl;
+        logE("error in setting socket options");
         return EXIT_FAILURE;
     }
 
@@ -57,17 +62,17 @@ int main(int argc, char* argv[])
 
     if(bind(server_fd, (struct sockaddr*)&address, sizeof(address)))
     {
-        std::cerr << color.error << "binding socket failed" << color.end << std::endl;
+        logE("binding socket failed");
         return EXIT_FAILURE;
     }
 
     if(listen(server_fd, 5) < 0)
     {
-        std::cerr << color.error << "unable to start listening" << color.end << std::endl;
+        logE("unable to start listening");
         return EXIT_FAILURE;
     }
 
-    std::cout << color.pass << "listening..." << color.end << std::endl;
+    logP("listening...");
 
     /* server starts listening and processing client connections */
 
@@ -107,24 +112,23 @@ int main(int argc, char* argv[])
 
         if(ready < 0)
         {
-            std::cerr << color.error << "server error" << color.end << std::endl;
+            logE("server error");
             break;
         }
-        // check if activity was caused by server or client:
         else if(FD_ISSET(server_fd, &socketset))
         {
 
             // if we have reached maxed connections do not accept:
             if(clients.size() == max_connections)
             {
-                std::cout << color.warning << "max connections reached" << color.end << std::endl;
+                logW("max connections reached");
                 continue;
             }
 
             int incomingClient{accept(server_fd, (struct sockaddr *)&client, (socklen_t *)&cli_len)};
             if(incomingClient < 0)
             {
-                std::cerr << color.error << "unable to accept to client" << color.end << std::endl;
+                logE("unable to accept to client");
                 continue;
             }
 
@@ -165,10 +169,10 @@ int main(int argc, char* argv[])
 
                     std::string msg(cbegin(buffer), cbegin(buffer) + bytes);
 
-                    // disconnect if no bytes were sent, else output message to terminal:
+                    // disconnect if no bytes were sent, else process message:
                     if(bytes <= 0)
                     {
-                        std::cout << color.warning << "client has disconnected..." << color.end << std::endl;
+                        logW("client has disconnected...");
 
                         close(client);
                         userTable.erase(name);

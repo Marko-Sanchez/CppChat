@@ -26,6 +26,11 @@ const struct Colors{
 
 }color;
 
+/* output logging to terminal */
+auto logP = [](std::string&& msg){std::cout << color.pass << msg << color.end << std::endl;};
+auto logE = [](std::string&& msg){std::cerr << color.error << msg << color.end << std::endl;};
+auto logW = [](std::string&& msg){std::cout << color.warning << msg << color.end << std::endl;};
+
 /*
  * function to be passed to std::async(), to be processed asynchronously.
  * Reads user input from terminal, then sends message to server.
@@ -89,9 +94,9 @@ void chat(const int serverFD)
     // establish pipe to write to self:
     if(pipe(pipefd) == -1)
     {
-        std::cerr << color.error << "error establishing pipe-to-self" << color.end << std::endl;
-
+        logE("error establishing pipe-to-self");
         close(serverFD);
+
         return;
     }
 
@@ -112,7 +117,7 @@ void chat(const int serverFD)
 
         if(ready < 0)
         {
-            std::cerr << color.error << "server error" << color.end << std::endl;
+            logE("server error");
             break;
         }
 
@@ -120,8 +125,8 @@ void chat(const int serverFD)
         {
             // send 0 bytes to server, indicating closure:
             send(serverFD, buffer, 0, flags);
+            logW("closing connection to server");
 
-            std::cout << color.warning << "closing connection to server" << color.end << std::endl;
             break;
         }
 
@@ -131,7 +136,7 @@ void chat(const int serverFD)
 
             if(bytes <= 0)
             {
-                std::cout << color.warning << "server has disconnected" << color.end << std::endl;
+                logW("server has disconnected");
                 break;
             }else
             {
@@ -164,11 +169,11 @@ int main(int argc, char* argv[])
 
     if(server_fd < 0)
     {
-        std::cerr << color.error << "socket connection failed" << color.end << std::endl;
+        logE("socket connection failed");
         return EXIT_FAILURE;
     }
 
-    std::cout << color.pass << "socket connected" << color.end << std::endl;
+    logP("socket connected");
 
     // setup sockets method of connection:
     serverAddr.sin_family = AF_INET;
@@ -178,11 +183,11 @@ int main(int argc, char* argv[])
     // Connect to server: Can use this same method to connect to another client, once serversneds back client info for us
     if(connect(server_fd, (struct sockaddr *)&serverAddr, sizeof(serverAddr)))
     {
-        std::cerr << color.error << "connection to server failed" << color.end << std::endl;
+        logE("connection to server failed");
         return EXIT_FAILURE;
     }
 
-    std::cout << color.pass << "connected to server" << color.end << std::endl;
+    logP("connected to server");
 
     std::vector<uint8_t> temp(cbegin(userName), cend(userName));
     auto len = static_cast<size_t>(temp.size());
