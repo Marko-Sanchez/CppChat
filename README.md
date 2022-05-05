@@ -5,6 +5,7 @@ Chatting service developed using TCP communications standard written in cpp.
 ## Objectives
 - [x] Make connections between server and client.
 - [x] Make a peer-to-peer connection (locally).
-- [ ] Make a peer-to-peer connection (from another machine?).
+- [x] Connect raylib library for chat GUI.
+- [ ] Create chat title screen and login page.
+- [ ] Make a peer-to-peer connection on a different network.
 - [ ] Build using cmake, for portability.
-- [ ] Test conection on a non-local connection.

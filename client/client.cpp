@@ -180,7 +180,7 @@ int main(int argc, char* argv[])
     serverAddr.sin_port = htons(PORT);
     serverAddr.sin_addr.s_addr = inet_addr("127.0.0.1");
 
-    // Connect to server: Can use this same method to connect to another client, once serversneds back client info for us
+    // Connect to server:
     if(connect(server_fd, (struct sockaddr *)&serverAddr, sizeof(serverAddr)))
     {
         logE("connection to server failed");

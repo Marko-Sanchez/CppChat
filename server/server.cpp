@@ -151,7 +151,7 @@ int main(int argc, char* argv[])
             send(incomingClient, &temp[0], len, flags);
 
             // add client to container:
-            clients.emplace_back(std::make_pair(incomingClient, name));
+            clients.emplace_back(incomingClient, name);
 
         }else
         {
