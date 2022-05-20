@@ -7,6 +7,7 @@ int main(void)
 
     InitWindow(screenWidth, screenHeight, "CPP Chat");
 
+    // Initialize screens:
     Login login;
     Chat chat;
     Title title;
@@ -32,7 +33,7 @@ int main(void)
 
             }break;
 
-            case Screens::ACTIVITY:
+            case Screens::CHATTING:
             {
 
                 chat.processChat();
@@ -59,7 +60,7 @@ int main(void)
 
                 }break;
 
-                case Screens::ACTIVITY:
+                case Screens::CHATTING:
                 {
 
                     chat.drawChat();
@@ -74,6 +75,7 @@ int main(void)
     }
 
     title.unload();
+    chat.unload();
 
     CloseWindow();
     return 0;

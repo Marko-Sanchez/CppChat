@@ -6,6 +6,9 @@ class Chat: public Activity
 {
     public:
 
+        /*
+         * Constructor, intitialize varaibles.
+         */
         Chat()
         {
             chatScreen = {screenWidth / 3.0f, 25, screenWidth * 2.0f/3.0f - 25, screenHeight - 75};
@@ -14,13 +17,27 @@ class Chat: public Activity
             chatTextBox = {chatScreen.x, chatScreen.y + chatScreen.height + 5, chatScreen.width * 3.0f/4.0f, 40};
             chatButton = {chatScreen.x + chatScreen.width * 3.0f / 4.0f ,chatScreen.y + chatScreen.height + 5, chatScreen.width / 4.0f, 40};
 
+            font = LoadFont("raylib/examples/text/resources/fonts/setback.png");
+            textPosition = {chatTextBox.x + 5, chatTextBox.y + 5};
+            spacing = 3.0f;
+
             chat_buffer.reserve(MAX_INPUT_CHAR);
         }
 
+        /*
+         * Checks wants to type or presses on button to send message.
+         *
+         * @output: fills 'chat_buffer' if user is typying in text box.
+         */
         void processChat()
         {
-            // for now if user clicks on box add something, later add button:
+            // if user presses button or enter key, add message to container:
             if(CheckCollisionPointRec(GetMousePosition(), chatButton) && IsGestureDetected(GESTURE_TAP))
+            {
+                messages.emplace_back(std::move(chat_buffer));
+                chat_buffer.clear();
+            }
+            else if(chatTyping && IsKeyPressed(KEY_ENTER))
             {
                 messages.emplace_back(std::move(chat_buffer));
                 chat_buffer.clear();
@@ -43,13 +60,17 @@ class Chat: public Activity
 
         }
 
+        /*
+         * Draws chat screen objects such as user text, buttons, text box, and messages.
+         */
         void drawChat()
         {
             DrawRectangleRec(chatScreen, GRAY);
             DrawRectangleRec(usersScreen, GRAY);
 
             DrawRectangleRounded(chatTextBox, 0.5f, 0, LIGHTGRAY);
-            DrawText(chat_buffer.c_str(), chatTextBox.x + 5, chatTextBox.y + 5, 35, BLACK);
+
+            DrawTextEx(font, chat_buffer.c_str(), textPosition, 35, spacing, BLACK);
 
             if(chatTyping)
                 DrawRectangleRoundedLines(chatTextBox, 0.6f , 0, 1, RED);
@@ -69,8 +90,16 @@ class Chat: public Activity
                     DrawRectangle(chatScreen.x, bottom - 30 * i, chatScreen.width, 30, DARKGRAY);
 
                 // add user text to rectangle:
-                DrawText(messages[messages.size() - i - 1].c_str(), chatScreen.x + 5, bottom - 30 * i, 30, LIME);
+                DrawTextEx(font, messages[messages.size() - i - 1].c_str(), {chatScreen.x + 5, bottom - 30 * i}, 30, spacing, LIME);
             }
+        }
+
+        /*
+         * Unload objects.
+         */
+        void unload()
+        {
+            UnloadFont(font);
         }
 
     private:
@@ -82,6 +111,10 @@ class Chat: public Activity
 
         Rectangle chatTextBox;
         Rectangle chatButton;
+
+        Vector2 textPosition;
+        float spacing;
+        Font font;
 
         std::string chat_buffer;
         std::vector<std::string> messages;

@@ -6,6 +6,7 @@ class Login: private Activity
 
     public:
 
+        /* Constructor, initialize variables */
         Login()
         {
             login_box = {screenWidth / 2.0f - 225, screenHeight / 2.0f - 225, 450, 450};
@@ -18,6 +19,13 @@ class Login: private Activity
             password_buffer.reserve(MAX_INPUT_CHAR);
         }
 
+        /*
+         * Checks if client is selecting a text-box to type in.
+         *
+         * @params: currScreen { Screen &} current screen being displayed.
+         *
+         * @outputs: logic for login screen to be drawn.
+         */
         void proccessLogin(Screen &currScreen)
         {
 
@@ -57,6 +65,9 @@ class Login: private Activity
 
         }
 
+        /*
+         * Draw login screen, background, text box, and button.
+         */
         void drawLogin()
         {
             // Draw login box:

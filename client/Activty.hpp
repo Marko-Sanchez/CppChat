@@ -2,7 +2,7 @@
 #include <raylib.h>
 #include <string>
 
-using Screen = enum class Screens:int{LOGIN = 0, TITLE, ACTIVITY};
+using Screen = enum class Screens:int{LOGIN = 0, TITLE, CHATTING};
 
 constexpr int screenWidth{1200};
 constexpr int screenHeight{750};
