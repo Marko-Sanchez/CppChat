@@ -1,7 +1,5 @@
 #include <cstring>
 #include <iostream>
-#include <string>
-#include <vector>
 #include <cstdio>
 #include <future>
 
@@ -10,6 +8,10 @@
 #include <sys/socket.h>
 #include <netdb.h>
 #include <sys/shm.h>
+
+#include "login.hpp"
+#include "title.hpp"
+#include "chat.hpp"
 
 constexpr uint16_t PORT{8080};
 constexpr ssize_t BUFFER_SIZE{1024};
@@ -32,59 +34,25 @@ auto logE = [](std::string&& msg){std::cerr << color.error << msg << color.end <
 auto logW = [](std::string&& msg){std::cout << color.warning << msg << color.end << std::endl;};
 
 /*
- * function to be passed to std::async(), to be processed asynchronously.
- * Reads user input from terminal, then sends message to server.
- * @params:     serverFD{const int} file descriptor to write to server.
- *              pfdWrite{const int} file descriptor to alert self to close.
+ * listens for activity on server and pipe file descriptors. Adds
+ * msg recieved from server onto container to be displayed in Chat gui.
+ * @params: serverFD{const int} file descriptor to write to server.
+ *          chat {Chat &} object to Chat scene.
  *
- * @output: sends message to server.
+ * @output: adds message from server to container to be displayed in GUI.
  */
-void clientInput(const int serverFD, const int pipe[])
+void handler(const int serverFD, Chat &chat)
 {
-    char buffer[BUFFER_SIZE] = {0};
-    const int flags{0};
-    ssize_t bytes{0};
 
-    int pfdWrite{pipe[1]};
-
-    std::cout << "> ";
-
-    while(std::cin.getline(buffer, BUFFER_SIZE))
-    {
-
-        // write message to server:
-        auto length = static_cast<ssize_t>(strlen(buffer));
-        bytes = send(serverFD, buffer, length, flags);
-
-        if(bytes <= 0)
-        {
-            send(pfdWrite, buffer, 0, flags); // write to self, to close connection:
-            close(pfdWrite);                  // close write end of pipe:
-            break;
-        }
-
-        std::cout << "> ";
-    }
-
-}
-
-/*
- * listens for activity on server and pipe file descriptors. If server
- * outputs message onto terminal, else begins shutting down process.
- * Launches thread to listen for user input on terminal.
- * @params:     serverFD{const int} file descriptor to write to server.
- *
- * @output: message from server onto terminal.
- */
-void chat(const int serverFD)
-{
+    // TODO: Attach self-pipe to close connection to server:
+    //       Make all Text fonts the same?
 
     char buffer[BUFFER_SIZE] = {0};
     const int flags{0};
 
     // output server response:
     ssize_t bytes = recv(serverFD,  &buffer, BUFFER_SIZE, flags);
-    std::cout << color.sMsg << buffer << color.end << std::endl;
+    chat.addMessage(std::string(buffer));
 
     memset(buffer, 0, bytes);
 
@@ -100,15 +68,15 @@ void chat(const int serverFD)
         return;
     }
 
-    // task for processsing user input:
-    auto ft = std::async(std::launch::async, clientInput, serverFD, pipefd);
+    // Pass server fd to chat object:
+    chat.addServerFileD(serverFD);
 
-    sleep(1);
     while(true)
     {
 
         FD_ZERO(&readfd);
-        FD_SET(serverFD, &readfd); FD_SET(pipefd[0], &readfd);
+        FD_SET(serverFD, &readfd);
+        FD_SET(pipefd[0], &readfd);
 
         int nfds{std::max(serverFD, pipefd[0]) + 1};
 
@@ -134,15 +102,14 @@ void chat(const int serverFD)
         {
             bytes = recv(serverFD, &buffer, BUFFER_SIZE, flags);
 
+            // If server sends 0 bytes disconnect, else add msg to list:
             if(bytes <= 0)
             {
                 logW("server has disconnected");
                 break;
             }else
             {
-                std::cout << buffer << std::endl;
-                std::cout << "> ";
-                std::flush(std::cout);
+                chat.addMessage(std::string(buffer));
             }
         }
 
@@ -156,11 +123,6 @@ void chat(const int serverFD)
 
 int main(int argc, char* argv[])
 {
-
-    std::cout << "enter username: ";
-    std::string userName;
-    getline(std::cin, userName);
-
     /* Setting up socket and connection to server */
 
     struct sockaddr_in serverAddr;
@@ -189,13 +151,102 @@ int main(int argc, char* argv[])
 
     logP("connected to server");
 
-    std::vector<uint8_t> temp(cbegin(userName), cend(userName));
-    auto len = static_cast<size_t>(temp.size());
+    /***************** DRAW GRAPHICS *******************/
 
-    // send user name to server:
-    send(server_fd, &temp[0], len, 0);
+    InitWindow(screenWidth, screenHeight, "CPP Chat");
 
-    chat(server_fd);
+    // Initialize screens:
+    Login login;
+    Chat chat;
+    Title title;
+
+    // first entering title: used to first notify server of clients name.
+    bool inTitle{true};
+
+    // We first start of on the login screen:
+    Screen currScreen = Screens::LOGIN;
+
+    auto chatFuture = std::async(std::launch::async, handler, server_fd, std::ref(chat));
+
+    SetTargetFPS(45);
+    while(!WindowShouldClose())
+    {
+        switch (currScreen)
+        {
+            case Screens::LOGIN:
+            {
+
+                login.proccessLogin(currScreen);
+
+            }break;
+
+            case Screens::TITLE:
+            {
+
+                // when first entering title send username to server:
+                if(inTitle)
+                {
+
+                    auto fut = std::async(std::launch::async,
+                            [userName = login.getUserName(), &server_fd](){
+
+                                // send user name to server:
+                                send(server_fd, userName.data(), userName.length(), 0);
+                            });
+
+                    inTitle = false;
+                }
+
+                title.processTitle(currScreen);
+
+            }break;
+
+            case Screens::CHATTING:
+            {
+
+                chat.processChat();
+
+            }break;
+            default: break;
+        }
+
+        BeginDrawing();
+            ClearBackground(BACKGROUND);
+
+            switch (currScreen) {
+                case Screens::LOGIN:
+                {
+
+                    login.drawLogin();
+
+                }break;
+
+                case Screens::TITLE:
+                {
+
+                    title.drawTitle();
+
+                }break;
+
+                case Screens::CHATTING:
+                {
+
+                    chat.drawChat();
+
+                }break;
+
+                default: break;
+            }
+
+        EndDrawing();
+
+    }
+
+    title.unload();
+    chat.unload();
+    login.unload();
+
+    CloseWindow();
 
     return EXIT_SUCCESS;
 }

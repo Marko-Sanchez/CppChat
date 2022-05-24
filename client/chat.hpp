@@ -1,14 +1,13 @@
 #pragma once
 #include "Activty.hpp"
 #include <vector>
+#include <sys/socket.h>
 
 class Chat: public Activity
 {
     public:
 
-        /*
-         * Constructor, intitialize varaibles.
-         */
+        /* Constructor, intitialize varaibles. */
         Chat()
         {
             chatScreen = {screenWidth / 3.0f, 25, screenWidth * 2.0f/3.0f - 25, screenHeight - 75};
@@ -25,7 +24,8 @@ class Chat: public Activity
         }
 
         /*
-         * Checks wants to type or presses on button to send message.
+         * Checks mouse position, gestures, and keys pressed to display
+         * text onto GUI and message server.
          *
          * @output: fills 'chat_buffer' if user is typying in text box.
          */
@@ -34,11 +34,18 @@ class Chat: public Activity
             // if user presses button or enter key, add message to container:
             if(CheckCollisionPointRec(GetMousePosition(), chatButton) && IsGestureDetected(GESTURE_TAP))
             {
+                // Send msg to server:
+                auto length = chat_buffer.length();
+                send(_serverfd, chat_buffer.c_str(), length, 0);
+
                 messages.emplace_back(std::move(chat_buffer));
                 chat_buffer.clear();
             }
             else if(chatTyping && IsKeyPressed(KEY_ENTER))
             {
+                auto length = chat_buffer.length();
+                send(_serverfd, chat_buffer.c_str(), length, 0);
+
                 messages.emplace_back(std::move(chat_buffer));
                 chat_buffer.clear();
             }
@@ -94,9 +101,19 @@ class Chat: public Activity
             }
         }
 
-        /*
-         * Unload objects.
-         */
+        /* Add string to container to be displayed in GUI. */
+        void addMessage(std::string &&newMsg)
+        {
+            messages.emplace_back(std::move(newMsg));
+        }
+
+        /* Required to be able to communicate to server. */
+        void addServerFileD(int serverFD)
+        {
+            _serverfd = serverFD;
+        }
+
+        /* Unload objects once no longer drawing. */
         void unload()
         {
             UnloadFont(font);
@@ -119,5 +136,6 @@ class Chat: public Activity
         std::string chat_buffer;
         std::vector<std::string> messages;
 
+        int _serverfd;
         bool chatTyping{false};
 };

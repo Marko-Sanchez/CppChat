@@ -19,7 +19,6 @@ class Activity
 
         /*
          * Grab user input when typing in textbox.
-         *
          * @params: buffer {std::string &} contains text for specfic text-box.
          *          MAX_INPUT {const int} max amount of characters for text-box.
          *

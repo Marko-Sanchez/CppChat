@@ -1,5 +1,6 @@
 #pragma once
 #include "Activty.hpp"
+#include <raylib.h>
 
 class Login: private Activity
 {
@@ -14,6 +15,8 @@ class Login: private Activity
             password_box = {username_box.x, username_box.y + 115, 350, 50};
             button_box = {password_box.x, password_box.y + 75, 350, 50};
 
+            font = LoadFont("raylib/examples/text/resources/fonts/pixelplay.png");
+            spacing = 3.0f;
 
             username_buffer.reserve(MAX_INPUT_CHAR);
             password_buffer.reserve(MAX_INPUT_CHAR);
@@ -21,7 +24,6 @@ class Login: private Activity
 
         /*
          * Checks if client is selecting a text-box to type in.
-         *
          * @params: currScreen { Screen &} current screen being displayed.
          *
          * @outputs: logic for login screen to be drawn.
@@ -65,34 +67,32 @@ class Login: private Activity
 
         }
 
-        /*
-         * Draw login screen, background, text box, and button.
-         */
+        /* Draw login screen, background, text box, and button. */
         void drawLogin()
         {
             // Draw login box:
             DrawRectangleRec(login_box, softblack);
 
-            // Draw text box and text inside text box:
+            // Draw text box and user text inside text box:
             DrawRectangleRec(username_box, LIGHTGRAY);
             DrawText("name", (int) username_box.x, (int) username_box.y - 25, 25, softwhite);
-            DrawText(username_buffer.c_str(), (int)username_box.x + 5, (int)username_box.y + 8, 40, BLACK);
+            DrawTextEx(font, username_buffer.c_str(), Vector2{ username_box.x + 5, username_box.y + 8 }, 40, spacing, BLACK);
 
             // draw red outline on textbox:
             if(usernameTyping)
-                DrawRectangleLines((int) username_box.x, (int) username_box.y, (int) username_box.width, (int) username_box.height, RED);
+                DrawRectangleLinesEx(username_box, 1, RED);
             else
-                DrawRectangleLines((int) username_box.x, (int) username_box.y, (int) username_box.width, (int) username_box.height, DARKGRAY);
+                DrawRectangleLinesEx(username_box, 1, DARKGRAY);
 
-            // Draw pasword box:
+            // Draw password box:
             DrawRectangleRec(password_box, LIGHTGRAY);
             DrawText("password", (int) password_box.x, (int) password_box.y - 25, 25, softwhite);
-            DrawText(password_buffer.c_str(), (int) password_box.x + 5, (int) password_box.y + 8, 40, BLACK);
+            DrawTextEx(font, password_buffer.c_str(), Vector2{ password_box.x + 5, password_box.y + 8 }, 40, spacing, BLACK);
 
             if(passwordTyping)
-                DrawRectangleLines((int) password_box.x, (int) password_box.y, (int) password_box.width, (int) password_box.height, RED);
+                DrawRectangleLinesEx(password_box, 1, RED);
             else
-                DrawRectangleLines((int) password_box.x, (int) password_box.y, (int) password_box.width, (int) password_box.height, DARKGRAY);
+                DrawRectangleLinesEx(password_box, 1, DARKGRAY);
 
             // Draw login button box:
             if(buttonPressed)
@@ -104,6 +104,18 @@ class Login: private Activity
 
         }
 
+        /* return users name */
+        std::string getUserName()
+        {
+            return username_buffer;
+        }
+
+        /* Unload objects after done drawing. */
+        void unload()
+        {
+            UnloadFont(font);
+        }
+
     private:
 
         const int MAX_INPUT_CHAR{16};
@@ -113,6 +125,9 @@ class Login: private Activity
         Rectangle password_box;
 
         Rectangle button_box;
+
+        float spacing;
+        Font font;
 
         bool usernameTyping{false}, passwordTyping{false};
         bool buttonPressed{false};

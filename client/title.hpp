@@ -6,9 +6,7 @@ class Title: public Activity
 
     public:
 
-        /*
-         * Constructor intitialize variables, load Fonts and textures.
-         */
+        /* Constructor intitialize variables, load Fonts and textures. */
         Title()
         {
             font = LoadFont("raylib/examples/text/resources/fonts/jupiter_crash.png");
@@ -21,7 +19,6 @@ class Title: public Activity
 
         /*
          * Waits in title for 3 seconds, before switching scene to chat screen.
-         *
          * @params: currScreen { Screen &} current screen being displayed.
          *
          * @output: changes scene after certain amount of time.
@@ -35,18 +32,14 @@ class Title: public Activity
             }
         }
 
-        /*
-         * Draws background with image and text.
-         */
+        /* Draws background Image and Text. */
         void drawTitle()
         {
             DrawTexture(texture, screenWidth / 2 - texture.width / 2, screenHeight / 2 - texture.height / 2, LIGHTGRAY);
             DrawTextEx(font, "KIND", titlePosition, 94, spacing, BLACK);
         }
 
-        /*
-         * Unload objects.
-         */
+         /* Unload objects after done drawing. */
         void unload()
         {
             UnloadTexture(texture);
