@@ -9,6 +9,7 @@ constexpr int screenHeight{750};
 
 /* Custom Colors */
 constexpr Color BACKGROUND({67, 49, 92, 255});
+constexpr Color softpurple({132, 109, 145, 255});
 constexpr Color softblack({20, 22, 23, 225});
 constexpr Color softwhite({184, 192, 161, 255});
 

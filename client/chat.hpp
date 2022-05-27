@@ -1,6 +1,11 @@
 #pragma once
 #include "Activty.hpp"
+#include <memory>
+#include <raylib.h>
+#include <string>
+#include <utility>
 #include <vector>
+#include <list>
 #include <sys/socket.h>
 
 class Chat: public Activity
@@ -21,6 +26,8 @@ class Chat: public Activity
             spacing = 3.0f;
 
             chat_buffer.reserve(MAX_INPUT_CHAR);
+
+            addContact("server");
         }
 
         /*
@@ -87,6 +94,7 @@ class Chat: public Activity
             DrawRectangleRounded(chatButton, 0.5f, 0, softblack);
             DrawText("send", chatButton.x + 70, chatButton.y + 10, 20, softwhite);
 
+            // Draw messages boxes:
             auto bottom{chatScreen.y + chatScreen.height - 30};
             for(int i = 0; i < messages.size(); i++)
             {
@@ -99,12 +107,32 @@ class Chat: public Activity
                 // add user text to rectangle:
                 DrawTextEx(font, messages[messages.size() - i - 1].c_str(), {chatScreen.x + 5, bottom - 30 * i}, 30, spacing, LIME);
             }
+
+            // Draw friends list:
+            int i = 0;
+            for(const auto &[name, rectptr]: friendList)
+            {
+                DrawRectangleRec(*rectptr, softpurple);
+                DrawRectangleLinesEx(*rectptr,  1.0f, DARKGRAY);
+                DrawText(name.c_str(), rectptr->x + 5, rectptr->y + 45 * i, 20, softwhite);
+
+                ++i;
+            }
         }
 
         /* Add string to container to be displayed in GUI. */
         void addMessage(std::string &&newMsg)
         {
             messages.emplace_back(std::move(newMsg));
+        }
+
+        /* Add a new contact to users friend list. */
+        void addContact(std::string &&name)
+        {
+            std::unique_ptr<Rectangle> ptr = std::make_unique<Rectangle>(
+                    Rectangle{usersScreen.x, usersScreen.y + 45 * friendList.size(), usersScreen.width, 45}
+                    );
+            friendList.emplace_back(std::move(name), std::move(ptr));
         }
 
         /* Required to be able to communicate to server. */
@@ -135,6 +163,7 @@ class Chat: public Activity
 
         std::string chat_buffer;
         std::vector<std::string> messages;
+        std::list< std::pair<std::string, std::unique_ptr<Rectangle>> > friendList;
 
         int _serverfd;
         bool chatTyping{false};

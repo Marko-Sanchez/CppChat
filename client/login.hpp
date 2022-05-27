@@ -96,7 +96,7 @@ class Login: private Activity
 
             // Draw login button box:
             if(buttonPressed)
-                DrawRectangleRounded(button_box, 0.5f, 0, {132, 109, 145, 255});
+                DrawRectangleRounded(button_box, 0.5f, 0, softpurple);
             else
                 DrawRectangleRounded(button_box, 0.5f, 0, BACKGROUND);
 
