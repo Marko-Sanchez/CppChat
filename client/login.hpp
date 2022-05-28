@@ -61,7 +61,7 @@ class Login: private Activity
             if(CheckCollisionPointRec(GetMousePosition(), button_box) && !IsGestureDetected(GESTURE_TAP))
                 buttonPressed = true;
             else if(CheckCollisionPointRec(GetMousePosition(), button_box) && IsGestureDetected(GESTURE_TAP))
-                currScreen = Screens::TITLE;
+                currScreen = Screen::TITLE;
             else
                 buttonPressed = false;
 

@@ -27,7 +27,7 @@ class Title: public Activity
         {
             if(++framesCounter > 300)
             {
-                currScreen = Screens::CHATTING;
+                currScreen = Screen::CHATTING;
                 framesCounter = 0;
             }
         }

@@ -164,7 +164,7 @@ int main(int argc, char* argv[])
     bool inTitle{true};
 
     // We first start of on the login screen:
-    Screen currScreen = Screens::LOGIN;
+    Screen currScreen = Screen::LOGIN;
 
     auto chatFuture = std::async(std::launch::async, handler, server_fd, std::ref(chat));
 
@@ -173,14 +173,14 @@ int main(int argc, char* argv[])
     {
         switch (currScreen)
         {
-            case Screens::LOGIN:
+            case Screen::LOGIN:
             {
 
                 login.proccessLogin(currScreen);
 
             }break;
 
-            case Screens::TITLE:
+            case Screen::TITLE:
             {
 
                 // when first entering title send username to server:
@@ -201,7 +201,7 @@ int main(int argc, char* argv[])
 
             }break;
 
-            case Screens::CHATTING:
+            case Screen::CHATTING:
             {
 
                 chat.processChat();
@@ -214,21 +214,21 @@ int main(int argc, char* argv[])
             ClearBackground(BACKGROUND);
 
             switch (currScreen) {
-                case Screens::LOGIN:
+                case Screen::LOGIN:
                 {
 
                     login.drawLogin();
 
                 }break;
 
-                case Screens::TITLE:
+                case Screen::TITLE:
                 {
 
                     title.drawTitle();
 
                 }break;
 
-                case Screens::CHATTING:
+                case Screen::CHATTING:
                 {
 
                     chat.drawChat();

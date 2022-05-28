@@ -1,8 +1,5 @@
 #pragma once
 #include "Activty.hpp"
-#include <memory>
-#include <raylib.h>
-#include <string>
 #include <utility>
 #include <vector>
 #include <list>
@@ -21,11 +18,12 @@ class Chat: public Activity
             chatTextBox = {chatScreen.x, chatScreen.y + chatScreen.height + 5, chatScreen.width * 3.0f/4.0f, 40};
             chatButton = {chatScreen.x + chatScreen.width * 3.0f / 4.0f ,chatScreen.y + chatScreen.height + 5, chatScreen.width / 4.0f, 40};
 
-            font = LoadFont("raylib/examples/text/resources/fonts/setback.png");
+            font = LoadFont("raylib/examples/text/resources/fonts/pixelplay.png");
             textPosition = {chatTextBox.x + 5, chatTextBox.y + 5};
             spacing = 3.0f;
 
             chat_buffer.reserve(MAX_INPUT_CHAR);
+            _serverfd = -1;//for testing
 
             addContact("server");
         }
@@ -43,21 +41,23 @@ class Chat: public Activity
             {
                 // Send msg to server:
                 auto length = chat_buffer.length();
-                send(_serverfd, chat_buffer.c_str(), length, 0);
+                if(_serverfd != -1)
+                    send(_serverfd, chat_buffer.c_str(), length, 0);
 
-                messages.emplace_back(std::move(chat_buffer));
+                messages.emplace_back(std::move(chat_buffer), Source::Local);
                 chat_buffer.clear();
             }
             else if(chatTyping && IsKeyPressed(KEY_ENTER))
             {
                 auto length = chat_buffer.length();
-                send(_serverfd, chat_buffer.c_str(), length, 0);
+                if(_serverfd != -1)
+                    send(_serverfd, chat_buffer.c_str(), length, 0);
 
-                messages.emplace_back(std::move(chat_buffer));
+                messages.emplace_back(std::move(chat_buffer), Source::Local);
                 chat_buffer.clear();
             }
 
-            //Does user want to type:
+            // Does user want to type:
             if(CheckCollisionPointRec(GetMousePosition(), chatTextBox) && IsGestureDetected(GESTURE_TAP))
             {
                 chatTyping = true;
@@ -72,6 +72,8 @@ class Chat: public Activity
             else
                 SetMouseCursor(MOUSE_CURSOR_DEFAULT);
 
+            // TODO: Add collision detection for user list
+            // when pressed that user will be contacted.
         }
 
         /*
@@ -96,47 +98,55 @@ class Chat: public Activity
 
             // Draw messages boxes:
             auto bottom{chatScreen.y + chatScreen.height - 30};
-            for(int i = 0; i < messages.size(); i++)
+            for(int i = 0, j = messages.size() - 1; i < messages.size(); i++, j--)
             {
-                // Draw rectangle:
-                if(i % 2 == 0)
-                    DrawRectangle(chatScreen.x, bottom - 30 * i, chatScreen.width, 30, LIGHTGRAY);
-                else
-                    DrawRectangle(chatScreen.x, bottom - 30 * i, chatScreen.width, 30, DARKGRAY);
+                auto &[msg, from] = messages[j];
 
-                // add user text to rectangle:
-                DrawTextEx(font, messages[messages.size() - i - 1].c_str(), {chatScreen.x + 5, bottom - 30 * i}, 30, spacing, LIME);
+                auto textLength = MeasureTextEx(font, msg.c_str(), 30, spacing);
+                auto leftalign = chatScreen.x + chatScreen.width - (textLength.x + 10);
+
+                // Draw rectangle and user text:
+                if(from == Source::Local)
+                {
+                    DrawRectangleRounded(Rectangle{leftalign, bottom - 30 * i, textLength.x + 10, 30}, 0.5f, 0, BLUE);
+                    DrawTextEx(font, msg.c_str(), {leftalign + 5, bottom - 30 * i}, 30, spacing, softwhite);
+                }
+                else
+                {
+                    DrawRectangleRounded(Rectangle{chatScreen.x, bottom - 30 * i, textLength.x + 10, 30}, 0.5f, 0, DARKGREEN);
+                    DrawTextEx(font, msg.c_str(), {chatScreen.x + 5, bottom - 30 * i}, 30, spacing, softwhite);
+                }
+
             }
 
             // Draw friends list:
             int i = 0;
             for(const auto &[name, rectptr]: friendList)
             {
-                DrawRectangleRec(*rectptr, softpurple);
-                DrawRectangleLinesEx(*rectptr,  1.0f, DARKGRAY);
-                DrawText(name.c_str(), rectptr->x + 5, rectptr->y + 45 * i, 20, softwhite);
+                DrawRectangleRec(rectptr, softpurple);
+                DrawRectangleLinesEx(rectptr,  1.0f, DARKGRAY);
+                DrawText(name.c_str(), rectptr.x + 5, rectptr.y + 45 * i, 20, softwhite);
 
                 ++i;
             }
         }
 
-        /* Add string to container to be displayed in GUI. */
-        void addMessage(std::string &&newMsg)
+        /* Add string and message source to container to be displayed in GUI. */
+        void addMessage(std::string &&newMsg) noexcept
         {
-            messages.emplace_back(std::move(newMsg));
+            messages.emplace_back(std::move(newMsg), Source::Remote);
         }
 
         /* Add a new contact to users friend list. */
-        void addContact(std::string &&name)
+        void addContact(std::string &&name) noexcept
         {
-            std::unique_ptr<Rectangle> ptr = std::make_unique<Rectangle>(
+            friendList.emplace_back(std::move(name),
                     Rectangle{usersScreen.x, usersScreen.y + 45 * friendList.size(), usersScreen.width, 45}
                     );
-            friendList.emplace_back(std::move(name), std::move(ptr));
         }
 
         /* Required to be able to communicate to server. */
-        void addServerFileD(int serverFD)
+        void addServerFileD(int serverFD) noexcept
         {
             _serverfd = serverFD;
         }
@@ -149,6 +159,7 @@ class Chat: public Activity
 
     private:
 
+        // TODO: Create a box for adding users:
         const int MAX_INPUT_CHAR{16};
 
         Rectangle chatScreen;
@@ -161,9 +172,12 @@ class Chat: public Activity
         float spacing;
         Font font;
 
+        enum class Source {Local, Remote};
+
         std::string chat_buffer;
-        std::vector<std::string> messages;
-        std::list< std::pair<std::string, std::unique_ptr<Rectangle>> > friendList;
+        /* std::unordered_map<std::string, std::vector<std::string, SOURCE>> messages; */
+        std::vector<std::pair<std::string, Source>> messages;
+        std::list< std::pair<std::string, Rectangle> > friendList;
 
         int _serverfd;
         bool chatTyping{false};

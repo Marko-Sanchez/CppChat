@@ -12,28 +12,28 @@ int main(void)
     Chat chat;
     Title title;
 
-    Screen currScreen = Screens::LOGIN;
+    Screen currScreen = Screen::LOGIN;
 
     SetTargetFPS(45);
     while(!WindowShouldClose())
     {
         switch (currScreen)
         {
-            case Screens::TITLE:
+            case Screen::TITLE:
             {
 
                 title.processTitle(currScreen);
 
             }break;
 
-            case Screens::LOGIN:
+            case Screen::LOGIN:
             {
 
                 login.proccessLogin(currScreen);
 
             }break;
 
-            case Screens::CHATTING:
+            case Screen::CHATTING:
             {
 
                 chat.processChat();
@@ -46,21 +46,21 @@ int main(void)
             ClearBackground(BACKGROUND);
 
             switch (currScreen) {
-                case Screens::TITLE:
+                case Screen::TITLE:
                 {
 
                     title.drawTitle();
 
                 }break;
 
-                case Screens::LOGIN:
+                case Screen::LOGIN:
                 {
 
                     login.drawLogin();
 
                 }break;
 
-                case Screens::CHATTING:
+                case Screen::CHATTING:
                 {
 
                     chat.drawChat();
@@ -76,6 +76,7 @@ int main(void)
 
     title.unload();
     chat.unload();
+    login.unload();
 
     CloseWindow();
     return 0;
