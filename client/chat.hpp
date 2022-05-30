@@ -1,5 +1,7 @@
 #pragma once
 #include "Activty.hpp"
+#include <memory>
+#include <raylib.h>
 #include <utility>
 #include <vector>
 #include <list>
@@ -18,11 +20,15 @@ class Chat: public Activity
             chatTextBox = {chatScreen.x, chatScreen.y + chatScreen.height + 5, chatScreen.width * 3.0f/4.0f, 40};
             chatButton = {chatScreen.x + chatScreen.width * 3.0f / 4.0f ,chatScreen.y + chatScreen.height + 5, chatScreen.width / 4.0f, 40};
 
+            searchTextBox = {usersScreen.x, usersScreen.y + usersScreen.height + 5, usersScreen.width * 3.0f/4.0f, 40};
+            searchButton = {usersScreen.x + usersScreen.width * 3.0f / 4.0f, usersScreen.y + usersScreen.height + 5, usersScreen.width / 4.0f, 40};
+
             font = LoadFont("raylib/examples/text/resources/fonts/pixelplay.png");
             textPosition = {chatTextBox.x + 5, chatTextBox.y + 5};
             spacing = 3.0f;
 
             chat_buffer.reserve(MAX_INPUT_CHAR);
+            search_buffer.reserve(MAX_INPUT_CHAR);
             _serverfd = -1;//for testing
 
             addContact("server");
@@ -72,8 +78,30 @@ class Chat: public Activity
             else
                 SetMouseCursor(MOUSE_CURSOR_DEFAULT);
 
+            // Does user want to search someone up
+            if(CheckCollisionPointRec(GetMousePosition(), searchTextBox) && IsGestureDetected(GESTURE_TAP))
+            {
+                searchTyping = true;
+            }else if(!CheckCollisionPointRec(GetMousePosition(), searchTextBox) && IsGestureDetected(GESTURE_TAP))
+            {
+                searchTyping = false;
+            }
+
+            if(CheckCollisionPointRec(GetMousePosition(), searchButton) && IsGestureDetected(GESTURE_TAP))
+            {
+                // TODO: Query user on server:
+                printf("Testing send button\n");
+                search_buffer.clear();
+            }
+
+            if (searchTyping)
+                typing(search_buffer, MAX_INPUT_CHAR);
+            else
+                SetMouseCursor(MOUSE_CURSOR_DEFAULT);
+
             // TODO: Add collision detection for user list
             // when pressed that user will be contacted.
+            // when searching for user query server for the users name.
         }
 
         /*
@@ -84,6 +112,7 @@ class Chat: public Activity
             DrawRectangleRec(chatScreen, GRAY);
             DrawRectangleRec(usersScreen, GRAY);
 
+            // Draw chat text-box and button:
             DrawRectangleRounded(chatTextBox, 0.5f, 0, LIGHTGRAY);
 
             DrawTextEx(font, chat_buffer.c_str(), textPosition, 35, spacing, BLACK);
@@ -95,6 +124,19 @@ class Chat: public Activity
 
             DrawRectangleRounded(chatButton, 0.5f, 0, softblack);
             DrawText("send", chatButton.x + 70, chatButton.y + 10, 20, softwhite);
+
+            // Draw search text-box and button:
+            DrawRectangleRounded(searchTextBox, 0.5f, 0, LIGHTGRAY);
+
+            DrawTextEx(font, search_buffer.c_str(), Vector2{searchTextBox.x + 5, searchTextBox.y + 5}, 35, spacing, BLACK);
+
+            if(searchTyping)
+                DrawRectangleRoundedLines(searchTextBox, 0.6f, 0, 1, RED);
+            else
+                DrawRectangleRoundedLines(searchTextBox, 0.6f, 0, 1, DARKGRAY);
+
+            DrawRectangleRounded(searchButton, 0.5f, 0, softblack);
+            DrawText("search", searchButton.x + 12, searchButton.y + 10, 19, softwhite);
 
             // Draw messages boxes:
             auto bottom{chatScreen.y + chatScreen.height - 30};
@@ -108,12 +150,12 @@ class Chat: public Activity
                 // Draw rectangle and user text:
                 if(from == Source::Local)
                 {
-                    DrawRectangleRounded(Rectangle{leftalign, bottom - 30 * i, textLength.x + 10, 30}, 0.5f, 0, BLUE);
+                    DrawRectangleRounded(Rectangle{leftalign, bottom - 30 * i, textLength.x + 10, 29}, 0.5f, 0, BLUE);
                     DrawTextEx(font, msg.c_str(), {leftalign + 5, bottom - 30 * i}, 30, spacing, softwhite);
                 }
                 else
                 {
-                    DrawRectangleRounded(Rectangle{chatScreen.x, bottom - 30 * i, textLength.x + 10, 30}, 0.5f, 0, DARKGREEN);
+                    DrawRectangleRounded(Rectangle{chatScreen.x, bottom - 30 * i, textLength.x + 10, 29}, 0.5f, 0, DARKGREEN);
                     DrawTextEx(font, msg.c_str(), {chatScreen.x + 5, bottom - 30 * i}, 30, spacing, softwhite);
                 }
 
@@ -165,6 +207,9 @@ class Chat: public Activity
         Rectangle chatScreen;
         Rectangle usersScreen;
 
+        Rectangle searchTextBox;
+        Rectangle searchButton;
+
         Rectangle chatTextBox;
         Rectangle chatButton;
 
@@ -175,10 +220,12 @@ class Chat: public Activity
         enum class Source {Local, Remote};
 
         std::string chat_buffer;
+        std::string search_buffer;
         /* std::unordered_map<std::string, std::vector<std::string, SOURCE>> messages; */
         std::vector<std::pair<std::string, Source>> messages;
         std::list< std::pair<std::string, Rectangle> > friendList;
 
         int _serverfd;
         bool chatTyping{false};
+        bool searchTyping{false};
 };
