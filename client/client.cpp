@@ -45,14 +45,13 @@ void handler(const int serverFD, Chat &chat)
 {
 
     // TODO: Attach self-pipe to close connection to server:
-    //       Make all Text fonts the same?
 
     char buffer[BUFFER_SIZE] = {0};
     const int flags{0};
 
     // output server response:
-    ssize_t bytes = recv(serverFD,  &buffer, BUFFER_SIZE, flags);
-    chat.addMessage(std::string(buffer));
+    size_t bytes = recv(serverFD,  &buffer, BUFFER_SIZE, flags);
+    chat.addMessage("server", std::string(buffer));
 
     memset(buffer, 0, bytes);
 
@@ -101,15 +100,25 @@ void handler(const int serverFD, Chat &chat)
         if(FD_ISSET(serverFD, &readfd))
         {
             bytes = recv(serverFD, &buffer, BUFFER_SIZE, flags);
+            std::string query{buffer};
 
-            // If server sends 0 bytes disconnect, else add msg to list:
             if(bytes <= 0)
             {
                 logW("server has disconnected");
                 break;
-            }else
+            }
+            else if(bytes == 3 && (buffer[0] == '$' && buffer[2] == '$'))
             {
-                chat.addMessage(std::string(buffer));
+                logW("Updated who client is talking to");
+                chat.contactStatus((buffer[1] == '1')?true:false);
+            }
+            else
+            {
+                auto found = query.find('$', 1);
+                std::string name{query.substr(1, found - 1)};
+                std::cout << "Message from: " << name << std::endl;
+
+                chat.addMessage(name, std::string(&buffer[found + 1]));
             }
         }
 

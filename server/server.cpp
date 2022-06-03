@@ -1,7 +1,8 @@
 #include <iostream>
-#include <vector>
+#include <array>
 #include <list>
 #include <map>
+#include <algorithm>
 #include <utility>
 
 #include <arpa/inet.h>
@@ -83,14 +84,15 @@ int main(int argc, char* argv[])
     fd_set socketset;
     const size_t max_connections{6};
 
-    std::list< std::pair<int,std::string> > clients;      // client file descriptors:
+    std::list< std::pair<int, std::string> > clients;     // client file descriptors:
     std::map<std::string, int> userTable;                 // client names, client fd:
 
+    std::array<char, BUFFER_SIZE> rbuffer = {0};
 
-    std::vector<uint8_t> buffer(BUFFER_SIZE, 0);
     const std::string welcomeMsg{"Welcome to the Server, "};
     int flags{0};
 
+    userTable["server"] = server_fd;
     while(true)
     {
 
@@ -137,20 +139,15 @@ int main(int argc, char* argv[])
                       << std::endl;
 
             // welcome user to server:
+            auto bytes = recv(incomingClient, &rbuffer.front(), BUFFER_SIZE, flags);
 
-            auto bytes = recv(incomingClient, &buffer[0], BUFFER_SIZE, flags);
+            std::string name(&rbuffer.front(), bytes);
+            std::string msg{welcomeMsg + name};
 
-            std::string name{begin(buffer), begin(buffer) + bytes};
-            std::string stemp{welcomeMsg + name};
+            send(incomingClient, msg.c_str(), msg.length(), flags);
 
+            // record client information:
             userTable[name] = incomingClient;
-
-            std::vector<uint8_t> temp(cbegin(stemp), cend(stemp));
-            auto len = static_cast<size_t>(temp.size());
-
-            send(incomingClient, &temp[0], len, flags);
-
-            // add client to container:
             clients.emplace_back(incomingClient, name);
 
         }else
@@ -164,10 +161,8 @@ int main(int argc, char* argv[])
                 if(FD_ISSET( client, &socketset))
                 {
 
-                    ssize_t bytes = recv(client,  &buffer[0], BUFFER_SIZE, flags);
+                    auto bytes = recv(client,  &rbuffer.front(), BUFFER_SIZE, flags);
                     std::cout << "number of bytes read: " << bytes << std::endl;
-
-                    std::string msg(cbegin(buffer), cbegin(buffer) + bytes);
 
                     // disconnect if no bytes were sent, else process message:
                     if(bytes <= 0)
@@ -180,31 +175,48 @@ int main(int argc, char* argv[])
 
                     }else
                     {
+                        std::string query(&rbuffer.front(), bytes);
+                        auto found = static_cast<int>(query.find('$', 1));
+                        std::cout << found << std::endl;
 
-                        std::cout << "client->" << msg << std::endl;
+                        std::string contactName{query.substr(1, found - 1)};
 
-                        auto found = msg.find(':');
+                        std::cout << "client->" << query << std::endl;
+                        std::cout << name << " is contacting " << contactName << std::endl;
 
-                        // send msg to other client, else echo back:
-                        if(found != std::string::npos && userTable.find(msg.substr(0, found)) != end(userTable))
+                        // update who user want's to talk to or continue with current contact:
+                        if(contactName.size() == query.size() - 2)
                         {
-                            std::string reciever{msg.substr(0, found)};
-                            auto clientFD = userTable[reciever];
+                            // If contact exist reply with true '1':
+                            if(userTable.find(contactName) != end(userTable))
+                            {
+                                send(client, "$1$", 3, flags);
+                                logP("User Exist");
+                            }else
+                            {
+                                send(client, "$0$", 3, flags);
+                                logW("User does not Exist");
+                            }
+                        }
+                        else if(userTable.find(contactName) != end(userTable) && contactName != "server")
+                        {
+                            // Get file descriptor of person to be contacted:
+                            auto contactFD = userTable[contactName];
+                            std::string msg{'$' + name + '$'};
+                            msg += query.substr(found + 1);
 
-                            msg = name + msg.substr(found);
-
-                            std::vector<uint8_t> temp(cbegin(msg), cend(msg));
-                            auto len = static_cast<size_t>(temp.size());
-
-                            bytes = send(clientFD, &temp[0], len, flags);
+                            bytes = send(contactFD, msg.c_str(), msg.length(), flags);
                         }else
                         {
-                            bytes = send(client, &buffer[0], bytes, flags);
+                            std::string msg{"$server$"};
+                            msg += query.substr(found + 1);
+
+                            bytes = send(client, msg.c_str(), msg.length(), flags);
                         }
 
                     }
 
-                    std::fill(begin(buffer), end(buffer), 0);
+                    rbuffer.fill(0);
                 }
 
             }

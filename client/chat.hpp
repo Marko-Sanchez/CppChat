@@ -1,10 +1,14 @@
 #pragma once
 #include "Activty.hpp"
+#include <cstdio>
 #include <memory>
 #include <raylib.h>
+#include <string>
 #include <utility>
 #include <vector>
 #include <list>
+#include <future>
+#include <map>
 #include <sys/socket.h>
 
 class Chat: public Activity
@@ -29,8 +33,9 @@ class Chat: public Activity
 
             chat_buffer.reserve(MAX_INPUT_CHAR);
             search_buffer.reserve(MAX_INPUT_CHAR);
-            _serverfd = -1;//for testing
+            _serverfd = -1;
 
+            talkingTo = "server";
             addContact("server");
         }
 
@@ -46,20 +51,24 @@ class Chat: public Activity
             if(CheckCollisionPointRec(GetMousePosition(), chatButton) && IsGestureDetected(GESTURE_TAP))
             {
                 // Send msg to server:
-                auto length = chat_buffer.length();
-                if(_serverfd != -1)
-                    send(_serverfd, chat_buffer.c_str(), length, 0);
+                std::string msgQuery = '$' + talkingTo + '$';
+                msgQuery += chat_buffer;
 
-                messages.emplace_back(std::move(chat_buffer), Source::Local);
+                if(_serverfd != -1)
+                    send(_serverfd, msgQuery.c_str(), msgQuery.length(), 0);
+
+                messages[talkingTo].emplace_back(std::move(chat_buffer), Source::Local);
                 chat_buffer.clear();
             }
             else if(chatTyping && IsKeyPressed(KEY_ENTER))
             {
-                auto length = chat_buffer.length();
-                if(_serverfd != -1)
-                    send(_serverfd, chat_buffer.c_str(), length, 0);
+                std::string msgQuery = '$' + talkingTo + '$';
+                msgQuery += chat_buffer;
 
-                messages.emplace_back(std::move(chat_buffer), Source::Local);
+                if(_serverfd != -1)
+                    send(_serverfd, msgQuery.c_str(), msgQuery.length(), 0);
+
+                messages[talkingTo].emplace_back(std::move(chat_buffer), Source::Local);
                 chat_buffer.clear();
             }
 
@@ -75,8 +84,6 @@ class Chat: public Activity
 
             if(chatTyping)
                 typing(chat_buffer, MAX_INPUT_CHAR);
-            else
-                SetMouseCursor(MOUSE_CURSOR_DEFAULT);
 
             // Does user want to search someone up
             if(CheckCollisionPointRec(GetMousePosition(), searchTextBox) && IsGestureDetected(GESTURE_TAP))
@@ -89,19 +96,28 @@ class Chat: public Activity
 
             if(CheckCollisionPointRec(GetMousePosition(), searchButton) && IsGestureDetected(GESTURE_TAP))
             {
-                // TODO: Query user on server:
-                printf("Testing send button\n");
-                search_buffer.clear();
+
+                // Query user on server:
+                auto fut = std::async(std::launch::async, [this, name = search_buffer]() mutable{
+                         std::string lookUp = "$" + name + "$";
+                         send(_serverfd, lookUp.c_str(), lookUp.length(), 0);
+                        });
             }
 
             if (searchTyping)
                 typing(search_buffer, MAX_INPUT_CHAR);
-            else
+
+            if(!searchTyping && !chatTyping)
                 SetMouseCursor(MOUSE_CURSOR_DEFAULT);
 
-            // TODO: Add collision detection for user list
-            // when pressed that user will be contacted.
-            // when searching for user query server for the users name.
+            // update who user is talking to if user taps on friends 'Rectangle'.
+            for(const auto& [name, rect]: friendList)
+            {
+                if(CheckCollisionPointRec(GetMousePosition(), rect) && IsGestureDetected(GESTURE_TAP))
+                {
+                    talkingTo = name;
+                }
+            }
         }
 
         /*
@@ -138,11 +154,34 @@ class Chat: public Activity
             DrawRectangleRounded(searchButton, 0.5f, 0, softblack);
             DrawText("search", searchButton.x + 12, searchButton.y + 10, 19, softwhite);
 
+            // Display text if user is searched for:
+            if(userFound != 0 && userFound == 1)
+            {
+                DrawText("User added", screenWidth / 2 - 100, screenHeight / 2, 45, BLACK);
+
+                if(++frameCounter > 120)
+                {
+                    frameCounter = 0;
+                    userFound = 0;
+                }
+            }else if(userFound != 0 && userFound == -1)
+            {
+                DrawText("User not found", screenWidth / 2 - 100, screenHeight / 2, 45, RED);
+
+                if(++frameCounter > 120)
+                {
+                    frameCounter = 0;
+                    userFound = 0;
+                }
+            }
+
             // Draw messages boxes:
             auto bottom{chatScreen.y + chatScreen.height - 30};
-            for(int i = 0, j = messages.size() - 1; i < messages.size(); i++, j--)
+            auto size = static_cast<int>(messages[talkingTo].size());
+
+            for(int i = 0, j = size - 1; i < size; i++, j--)
             {
-                auto &[msg, from] = messages[j];
+                auto &[msg, from] = messages[talkingTo][j];
 
                 auto textLength = MeasureTextEx(font, msg.c_str(), 30, spacing);
                 auto leftalign = chatScreen.x + chatScreen.width - (textLength.x + 10);
@@ -162,32 +201,49 @@ class Chat: public Activity
             }
 
             // Draw friends list:
-            int i = 0;
             for(const auto &[name, rectptr]: friendList)
             {
                 DrawRectangleRec(rectptr, softpurple);
                 DrawRectangleLinesEx(rectptr,  1.0f, DARKGRAY);
-                DrawText(name.c_str(), rectptr.x + 5, rectptr.y + 45 * i, 20, softwhite);
-
-                ++i;
+                DrawText(name.c_str(), rectptr.x + 5, rectptr.y, 20, softwhite);
             }
         }
 
-        /* Add string and message source to container to be displayed in GUI. */
-        void addMessage(std::string &&newMsg) noexcept
+        /*
+         * Adds message and who sent it to message container.
+         * @param: name{std::string} Name of person who sent message.
+         *         newMsg{std::string} message to add to container.
+         *
+         * @output: associates msg with who sent it.
+        */
+        void addMessage(std::string name, std::string &&newMsg) noexcept
         {
-            messages.emplace_back(std::move(newMsg), Source::Remote);
+            messages[name].emplace_back(std::move(newMsg), Source::Remote);
         }
 
         /* Add a new contact to users friend list. */
         void addContact(std::string &&name) noexcept
         {
+            messages.emplace(name, std::vector< std::pair<std::string, Source> >());
+
             friendList.emplace_back(std::move(name),
                     Rectangle{usersScreen.x, usersScreen.y + 45 * friendList.size(), usersScreen.width, 45}
                     );
         }
 
-        /* Required to be able to communicate to server. */
+        /* Notifys if queried contact exist within server, adds contact to friends list. */
+        void contactStatus(bool contactFound)
+        {
+
+            userFound = contactFound?1:-1;
+
+            if(userFound == 1)
+                addContact(std::move(search_buffer));
+
+            search_buffer.clear();
+        }
+
+        /* Initialize server file descriptor. */
         void addServerFileD(int serverFD) noexcept
         {
             _serverfd = serverFD;
@@ -201,8 +257,7 @@ class Chat: public Activity
 
     private:
 
-        // TODO: Create a box for adding users:
-        const int MAX_INPUT_CHAR{16};
+        const int MAX_INPUT_CHAR{32};
 
         Rectangle chatScreen;
         Rectangle usersScreen;
@@ -221,11 +276,13 @@ class Chat: public Activity
 
         std::string chat_buffer;
         std::string search_buffer;
-        /* std::unordered_map<std::string, std::vector<std::string, SOURCE>> messages; */
-        std::vector<std::pair<std::string, Source>> messages;
+        std::string talkingTo;
+
+        std::map<std::string, std::vector< std::pair<std::string, Source> >> messages;
         std::list< std::pair<std::string, Rectangle> > friendList;
 
         int _serverfd;
+        int userFound{0}, frameCounter{0};
         bool chatTyping{false};
         bool searchTyping{false};
 };
