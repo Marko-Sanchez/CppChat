@@ -38,34 +38,23 @@ auto logW = [](std::string&& msg){std::cout << color.warning << msg << color.end
  * msg recieved from server onto container to be displayed in Chat gui.
  * @params: serverFD{const int} file descriptor to write to server.
  *          chat {Chat &} object to Chat scene.
+ *          selfPipe{int []} pipe file descriptor for inter-process communication.
  *
  * @output: adds message from server to container to be displayed in GUI.
  */
-void handler(const int serverFD, Chat &chat)
+void handler(const int serverFD, Chat &chat, const int selfPipe[])
 {
-
-    // TODO: Attach self-pipe to close connection to server:
 
     char buffer[BUFFER_SIZE] = {0};
     const int flags{0};
 
-    // output server response:
+    // read server response:
     size_t bytes = recv(serverFD,  &buffer, BUFFER_SIZE, flags);
     chat.addMessage("server", std::string(buffer));
 
     memset(buffer, 0, bytes);
 
     fd_set readfd;
-    int pipefd[2];
-
-    // establish pipe to write to self:
-    if(pipe(pipefd) == -1)
-    {
-        logE("error establishing pipe-to-self");
-        close(serverFD);
-
-        return;
-    }
 
     // Pass server fd to chat object:
     chat.addServerFileD(serverFD);
@@ -75,9 +64,9 @@ void handler(const int serverFD, Chat &chat)
 
         FD_ZERO(&readfd);
         FD_SET(serverFD, &readfd);
-        FD_SET(pipefd[0], &readfd);
+        FD_SET(selfPipe[0], &readfd);
 
-        int nfds{std::max(serverFD, pipefd[0]) + 1};
+        int nfds{std::max(serverFD, selfPipe[0]) + 1};
 
         // listen for activity from server and self:
         int ready{select(nfds, &readfd, nullptr, nullptr, nullptr)};
@@ -88,7 +77,7 @@ void handler(const int serverFD, Chat &chat)
             break;
         }
 
-        if(FD_ISSET(pipefd[0], &readfd))
+        if(FD_ISSET(selfPipe[0], &readfd))
         {
             // send 0 bytes to server, indicating closure:
             send(serverFD, buffer, 0, flags);
@@ -125,9 +114,9 @@ void handler(const int serverFD, Chat &chat)
         memset(buffer, 0, bytes);
     }
 
-    close(pipefd[0]);        // close read end of pipe:
-    close(pipefd[1]);        // close write end of pipe:
-    close(serverFD);         // close socket to server:
+    close(selfPipe[0]);        // close read end of pipe:
+    close(selfPipe[1]);        // close write end of pipe:
+    close(serverFD);           // close socket to server:
 }
 
 int main(int argc, char* argv[])
@@ -160,6 +149,15 @@ int main(int argc, char* argv[])
 
     logP("connected to server");
 
+    int selfPipe[2];
+    if(pipe(selfPipe) == -1)
+    {
+        logE("error establishing pipe-to-self");
+        close(server_fd);
+        return EXIT_FAILURE;
+    }
+
+
     /***************** DRAW GRAPHICS *******************/
 
     InitWindow(screenWidth, screenHeight, "CPP Chat");
@@ -175,7 +173,7 @@ int main(int argc, char* argv[])
     // We first start of on the login screen:
     Screen currScreen = Screen::LOGIN;
 
-    auto chatFuture = std::async(std::launch::async, handler, server_fd, std::ref(chat));
+    auto chatFuture = std::async(std::launch::async, handler, server_fd, std::ref(chat), selfPipe);
 
     SetTargetFPS(45);
     while(!WindowShouldClose())
@@ -216,6 +214,7 @@ int main(int argc, char* argv[])
                 chat.processChat();
 
             }break;
+
             default: break;
         }
 
@@ -256,6 +255,10 @@ int main(int argc, char* argv[])
     login.unload();
 
     CloseWindow();
+
+    // close connection to server and stop listening:
+    write(selfPipe[1], "X" /* arbitary string*/, 1);
+    close(selfPipe[1]);
 
     return EXIT_SUCCESS;
 }

@@ -9,6 +9,6 @@ Chatting service developed using TCP communications standard written in c++17. U
 - [x] Connect raylib library for chat GUI.
 - [x] Create chat title screen and login page.
 - [x] Connect GUI and socket-backend, on client.
-- [x] User are able to talk to each using GUI.
+- [x] User are able to talk to each other using GUI.
 - [ ] Make a peer-to-peer connection on a different network.
 - [ ] Build using cmake, for portability.

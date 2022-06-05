@@ -33,7 +33,7 @@ class Chat: public Activity
 
             chat_buffer.reserve(MAX_INPUT_CHAR);
             search_buffer.reserve(MAX_INPUT_CHAR);
-            _serverfd = -1;
+            serverFD = -1;
 
             talkingTo = "server";
             addContact("server");
@@ -48,25 +48,25 @@ class Chat: public Activity
         void processChat()
         {
             // if user presses button or enter key, add message to container:
-            if(CheckCollisionPointRec(GetMousePosition(), chatButton) && IsGestureDetected(GESTURE_TAP))
+            if(CheckCollisionPointRec(GetMousePosition(), chatButton) && IsGestureDetected(GESTURE_TAP) && chat_buffer.size() > 0)
             {
                 // Send msg to server:
                 std::string msgQuery = '$' + talkingTo + '$';
                 msgQuery += chat_buffer;
 
-                if(_serverfd != -1)
-                    send(_serverfd, msgQuery.c_str(), msgQuery.length(), 0);
+                if(serverFD != -1)
+                    send(serverFD, msgQuery.c_str(), msgQuery.length(), 0);
 
                 messages[talkingTo].emplace_back(std::move(chat_buffer), Source::Local);
                 chat_buffer.clear();
             }
-            else if(chatTyping && IsKeyPressed(KEY_ENTER))
+            else if(chatTyping && IsKeyPressed(KEY_ENTER) && chat_buffer.size() > 0)
             {
                 std::string msgQuery = '$' + talkingTo + '$';
                 msgQuery += chat_buffer;
 
-                if(_serverfd != -1)
-                    send(_serverfd, msgQuery.c_str(), msgQuery.length(), 0);
+                if(serverFD != -1)
+                    send(serverFD, msgQuery.c_str(), msgQuery.length(), 0);
 
                 messages[talkingTo].emplace_back(std::move(chat_buffer), Source::Local);
                 chat_buffer.clear();
@@ -94,13 +94,15 @@ class Chat: public Activity
                 searchTyping = false;
             }
 
-            if(CheckCollisionPointRec(GetMousePosition(), searchButton) && IsGestureDetected(GESTURE_TAP))
+            if((CheckCollisionPointRec(GetMousePosition(), searchButton) && IsGestureDetected(GESTURE_TAP))
+                || (searchTyping && IsKeyPressed(KEY_ENTER))
+                && search_buffer.size() > 0)
             {
 
                 // Query user on server:
                 auto fut = std::async(std::launch::async, [this, name = search_buffer]() mutable{
                          std::string lookUp = "$" + name + "$";
-                         send(_serverfd, lookUp.c_str(), lookUp.length(), 0);
+                         send(serverFD, lookUp.c_str(), lookUp.length(), 0);
                         });
             }
 
@@ -244,9 +246,9 @@ class Chat: public Activity
         }
 
         /* Initialize server file descriptor. */
-        void addServerFileD(int serverFD) noexcept
+        void addServerFileD(int serverFD_) noexcept
         {
-            _serverfd = serverFD;
+            serverFD = serverFD_;
         }
 
         /* Unload objects once no longer drawing. */
@@ -281,7 +283,7 @@ class Chat: public Activity
         std::map<std::string, std::vector< std::pair<std::string, Source> >> messages;
         std::list< std::pair<std::string, Rectangle> > friendList;
 
-        int _serverfd;
+        int serverFD;
         int userFound{0}, frameCounter{0};
         bool chatTyping{false};
         bool searchTyping{false};
