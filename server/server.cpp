@@ -78,8 +78,8 @@ int main(int argc, char* argv[])
     /* server starts listening and processing client connections */
 
     // client address container:
-    struct sockaddr_in client;
-    socklen_t cli_len{sizeof(client)};
+    struct sockaddr_in clientSocket;
+    socklen_t cli_len{sizeof(clientSocket)};
 
     fd_set socketset;
     const size_t max_connections{6};
@@ -127,7 +127,7 @@ int main(int argc, char* argv[])
                 continue;
             }
 
-            int incomingClient{accept(server_fd, (struct sockaddr *)&client, (socklen_t *)&cli_len)};
+            int incomingClient{accept(server_fd, (struct sockaddr *)&clientSocket, (socklen_t *)&cli_len)};
             if(incomingClient < 0)
             {
                 logE("unable to accept to client");
@@ -135,7 +135,7 @@ int main(int argc, char* argv[])
             }
 
             std::cout << color.warning << "new connection, socket: " << incomingClient
-                      << " ,there IP is: " << inet_ntoa(client.sin_addr) << color.end
+                      << " ,there IP is: " << inet_ntoa(clientSocket.sin_addr) << color.end
                       << std::endl;
 
             // welcome user to server:
