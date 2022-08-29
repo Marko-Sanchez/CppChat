@@ -16,7 +16,7 @@
 constexpr uint16_t PORT{8080};
 constexpr ssize_t BUFFER_SIZE{1024};
 
-/* Contianer for colored text values to output onto terminal */
+/* Container for colored text values to output onto terminal */
 const struct Colors{
 
     const std::string pass{"\033[0;32m"};
@@ -138,6 +138,7 @@ int main(int argc, char* argv[])
     // setup sockets method of connection:
     serverAddr.sin_family = AF_INET;
     serverAddr.sin_port = htons(PORT);
+    /* serverAddr.sin_addr.s_addr = inet_addr("address used to connect on another machine"); */
     serverAddr.sin_addr.s_addr = inet_addr("127.0.0.1");
 
     // Connect to server:
