@@ -1,14 +1,17 @@
 # CppChat
-![cpp](https://img.shields.io/badge/Language-c%2B%2B17-blue) ![socket](https://img.shields.io/badge/TCP-socket%20programming-orange) ![Linux](https://img.shields.io/badge/Linux-Ubuntu-critical) ![gui](https://img.shields.io/badge/GUI-Raylib-lightgrey?link=https://github.com/raysan5/raylib)
+![cpp](https://img.shields.io/badge/C++-17-blue) ![boost](https://img.shields.io/badge/Boost.Asio-orange) ![Linux](https://img.shields.io/badge/Linux-Ubuntu-critical) ![gui](https://img.shields.io/badge/GUI-QT-lightgreen)
 
-Chatting service developed using TCP communications standard written in c++17. Using raylib to provide client with graphic user interface.
+A server-client asynchronous application using Transmission Control Protocol, developed in cpp using Boost.Asio for networking and QT as the GUI.
 
-## Objectives
-- [x] Make connections between server and client.
-- [x] Make a peer-to-peer connection (locally).
-- [x] Connect raylib library for chat GUI.
-- [x] Create chat title screen and login page.
-- [x] Connect GUI and socket-backend, on client.
-- [x] User are able to talk to each other using GUI.
-- [x] Make a peer-to-peer connection on a different network (linux).
-- [ ] Build using cmake, for portability.
+## GOALS
+----
+### Networking
+1. Build asynchronous server.
+2. Build asynchronous client.
+3. Develop server-client communication standard.
+4. Test communication with various clients.
+5. Build local database for better caching.
+
+### User interface
+1. Test simple gui with QT.
+2. Attach user events with backend.
