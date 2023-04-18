@@ -6,7 +6,6 @@
 
 int main (int argc, char *argv[])
 {
-    const std::string ip_address{"127.0.0.1"};
     unsigned short port_num{8080};
 
     try
