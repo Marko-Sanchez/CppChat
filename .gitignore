@@ -30,3 +30,9 @@
 *.exe
 *.out
 *.app
+
+# compilation database
+compile_commands.json
+
+# cmake
+.cache/
