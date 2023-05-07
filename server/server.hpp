@@ -18,7 +18,7 @@ class Acceptor
     private:
         asio::io_service &m_ios;
         asio::ip::tcp::acceptor m_acceptor;
-        std::atomic<bool> m_isStopped;
+        std::atomic<bool> m_isStopped;      // TODO: shared_ptr to be given to service to know when to shutdown?
 
         std::shared_ptr<Database> m_database;
 
@@ -29,7 +29,15 @@ class Acceptor
             m_acceptor.async_accept(*sock.get(),
                     [this, sock](const system::error_code &ec)
                     {
-                        onAccept(ec, sock);
+                        if(ec.value() != 0)
+                        {
+                            std::cerr << "Error connecting to client..." << std::endl;
+                        }
+                        else
+                        {
+                            std::cout << "Connection to client succesfull..." << std::endl;
+                            onAccept(ec, sock);
+                        }
                     });
         }
 
@@ -44,6 +52,7 @@ class Acceptor
             if(ec.value() == 0)
             {
                 // TODO: unique pointer and add to database
+                /* std::unique_ptr<Service> t = std::make_unique<Service>(sock); */
                 (new Service(sock)) -> startHandling();
             }
             else

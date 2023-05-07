@@ -16,7 +16,7 @@ using namespace boost;
 
 struct Request
 {
-    const std::string messageTemplate{"Author: %s\nTarget: %s\nContent-length: %d\n%s"};
+    const std::string messageTemplate{"Author: %s\nTarget: %s\nContent-length: %zu\n%s"};
     std::string m_author;
     std::string m_target;
     std::string m_message;
@@ -53,12 +53,15 @@ class Service
 
                         if(ec.value() != 0)
                         {
-
+                            std::cerr << "Error reading author name: " << ec.message() << std::endl;
+                            onFinish();
                         }
 
                         std::istream is(&m_buffer);
                         std::getline(is, request.m_author);
                         request.m_author = request.m_author.substr(request.m_author.find(' '));
+
+                        std::cout << "Author: " << request.m_author << std::endl;
 
                         // read target name
                         asio::async_read_until(*m_sock.get(), m_buffer, '\n',
@@ -66,12 +69,15 @@ class Service
 
                             if(ec.value() != 0)
                             {
-
+                                std::cerr << "Error reading target name: " << ec.message() << std::endl;
+                                onFinish();
                             }
 
                             std::istream is(&m_buffer);
-                            std::getline(is, request.m_author);
+                            std::getline(is, request.m_target);
                             request.m_target = request.m_target.substr(request.m_target.find(' '));
+
+                            std::cout << "Target: " << request.m_target << std::endl;
 
                             // read content-length
                             asio::async_read_until(*m_sock.get(), m_buffer, '\n',
@@ -79,15 +85,17 @@ class Service
                                     {
                                         if(ec.value() != 0)
                                         {
-
+                                            std::cerr << "Error reading content-length: " << ec.message() << std::endl;
+                                            onFinish();
                                         }
 
                                         std::istream is(&m_buffer);
                                         std::string temp;
 
                                         getline(is, temp);
-                                        sscanf(temp.c_str(), "%*s %ld", &request.m_length);
+                                        sscanf(temp.c_str(), "%*s %zu", &request.m_length);
 
+                                        std::cout << "Content-length: " << request.m_length << std::endl;
 
                                         // read contents
                                         asio::async_read(*m_sock.get(), m_buffer, asio::transfer_exactly(request.m_length),
@@ -95,14 +103,19 @@ class Service
                                                 {
                                                     if(ec.value() != 0)
                                                     {
-
+                                                        std::cerr << "Error reading contents of message: " << ec.message() << std::endl;
+                                                        onFinish();
                                                     }
 
                                                     // TODO: check if bytes bytes_transferred equals content length ?
                                                     std::istream is(&m_buffer);
                                                     is >> request.m_message;
 
-                                                    readComplete(ec, bytes_transferred);
+                                                    std::cout << "Message:\n" << request.m_message << std::endl;
+
+                                                    // reply to client.
+                                                    /* readComplete(ec, bytes_transferred); */
+                                                    onFinish();
                                                 });
                                     });
                                 });
@@ -111,13 +124,9 @@ class Service
 
         /*
          * write to the clients target recipient.
-         *
-         * TODO: implement client to test
          */
         void writeToTarget()
         {
-            std::cout << request.m_message << std::endl;
-
             asio::streambuf buf;
             std::ostream os(&buf);
             os << "Author: " << request.m_author << '\n'
@@ -141,7 +150,8 @@ class Service
 
         void onFinish()
         {
-            delete this;
+            std::cout << "Finished processing request" << std::endl;
+            /* delete this; */
         }
 
     public:
@@ -153,6 +163,7 @@ class Service
         void startHandling()
         {
             // TODO: function for first time client connection to store there name and also adds them to database
+            std::cout << "Handling client..." << std::endl;
             readFromClient();
         }
 };
