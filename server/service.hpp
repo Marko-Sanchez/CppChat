@@ -16,12 +16,22 @@ using namespace boost;
 
 struct Request
 {
-    const std::string messageTemplate{"Author: %s\nTarget: %s\nContent-length: %zu\n%s"};
+    const std::string messageTemplate{"Author: %s\nTarget: %s\nContent-length: %zu\r\n\r\n%s"};
     std::string m_author;
     std::string m_target;
     std::string m_message;
 
     std::size_t m_length;
+
+    Request() = default;
+
+    Request(std::string author, std::string target, std::string message):
+        m_author(author),
+        m_target(target),
+        m_message(message)
+    {
+        m_length = m_message.length();
+    }
 };
 
 // TODO: when would i call onFinish() ? when it's own socket is shutdown ?
@@ -75,12 +85,14 @@ class Service
 
                             std::istream is(&m_buffer);
                             std::getline(is, request.m_target);
+                            auto size = request.m_target.length();
                             request.m_target = request.m_target.substr(request.m_target.find(' '));
 
                             std::cout << "Target: " << request.m_target << std::endl;
 
+
                             // read content-length
-                            asio::async_read_until(*m_sock.get(), m_buffer, '\n',
+                            asio::async_read_until(*m_sock.get(), m_buffer, "\r\n\r\n",
                                     [this](const system::error_code &ec, std::size_t bytes_transferred)
                                     {
                                         if(ec.value() != 0)
@@ -94,11 +106,12 @@ class Service
 
                                         getline(is, temp);
                                         sscanf(temp.c_str(), "%*s %zu", &request.m_length);
+                                        getline(is, temp);
 
                                         std::cout << "Content-length: " << request.m_length << std::endl;
 
                                         // read contents
-                                        asio::async_read(*m_sock.get(), m_buffer, asio::transfer_exactly(request.m_length),
+                                        asio::async_read_until(*m_sock.get(), m_buffer, "\r\n\r\n",
                                                 [this](const system::error_code &ec, std::size_t bytes_transferred)
                                                 {
                                                     if(ec.value() != 0)
@@ -107,15 +120,17 @@ class Service
                                                         onFinish();
                                                     }
 
-                                                    // TODO: check if bytes bytes_transferred equals content length ?
                                                     std::istream is(&m_buffer);
-                                                    is >> request.m_message;
+
+                                                    for(char c; is.get(c); )
+                                                    {
+                                                        request.m_message.push_back(c);
+                                                    }
 
                                                     std::cout << "Message:\n" << request.m_message << std::endl;
 
-                                                    // reply to client.
-                                                    /* readComplete(ec, bytes_transferred); */
-                                                    onFinish();
+                                                    // TODO: reply to client.
+                                                    /* writeToTarget(); */
                                                 });
                                     });
                                 });
@@ -127,23 +142,31 @@ class Service
          */
         void writeToTarget()
         {
+            std::cout << "Writing to client..." << std::endl;
+
             asio::streambuf buf;
             std::ostream os(&buf);
-            os << "Author: " << request.m_author << '\n'
-               << "Target: " << request.m_target << '\n'
-               << "Content-length: " << request.m_length << '\n'
-               << request.m_message << '\n';
 
-            boost::format fmt = boost::format(request.messageTemplate) % request.m_author % request.m_target
-                                % request.m_length % request.m_message;
-            std::cout << fmt.str() << std::endl;
+            Request l_request("server", "client", "Hello client");
+            boost::format fmt = boost::format(l_request.messageTemplate) % l_request.m_author % l_request.m_target
+                                % l_request.m_length % l_request.m_message;
+            std::cout << "Printing out message:\n" << fmt.str() << std::endl;
 
-            // asio::async_write(*m_sock.get()/*this would be the other clients socket, placeholder for now*/,
-                             /* asio::buffer(fmt.str()), */
-                             /* [this](const system::error_code &ec, std::size_t bytes_transferred) */
-                             /* { */
+             asio::async_write(*m_sock.get()/*this would be the other clients socket, placeholder for now*/,
+                             asio::buffer(fmt.str()),
+                             [this, fmt](const system::error_code &ec, std::size_t bytes_transferred)
+                             {
+                                if(ec.value() != 0)
+                                {
+                                    std::cerr << "Error writing to client: " << ec.message() << std::endl;
+                                }else if(bytes_transferred != fmt.str().length())
+                                {
+                                    std::cerr << "Failed to send all bytes:\nTotal bytes: " << fmt.str().length()
+                                             << "\nBytes sent: " << bytes_transferred << std::endl;
+                                }
 
-/*                              }); */
+                                std::cout << "Successfully sent client message..." << std::endl;
+                             });
 
             onFinish();
         }

@@ -18,7 +18,7 @@ using namespace boost;
 
 struct Request {
 
-    const std::string m_template{"Author: %s\nTarget: %s\nContent-length: %zu\n%s"};
+    const std::string m_template{"Author: %s\nTarget: %s\nContent-length: %zu\r\n\r\n%s\r\n\r\n"};
     std::string m_author;
     std::string m_target;
     std::string m_message;
@@ -82,6 +82,9 @@ class TCPClient {
         const std::string m_author;
         std::atomic_bool m_isClosed;
 
+        Request request;
+        asio::streambuf buf;
+
         /*
          * Write formatted request to server.
          * precondition:
@@ -115,8 +118,8 @@ class TCPClient {
          */
         void readFromServer()
         {
-            std::shared_ptr<Request> request;
-            std::shared_ptr<asio::streambuf> buf;
+            std::cout << "Listening for server..." << std::endl;
+
 
             if(m_isClosed.load())
             {
@@ -124,62 +127,81 @@ class TCPClient {
             }
 
             // read author
-            asio::async_read_until(*m_sock.get(), *buf.get(), '\n',
-                    [this, request, buf](const system::error_code &ec, std::size_t bytes_transferred)
+            asio::async_read_until(*m_sock.get(), buf, '\n',
+                    [this](const system::error_code &ec, std::size_t bytes_transferred)
                     {
                         if(ec.value() != 0)
                         {
-                            std::cerr << "Failed to read from server: " << ec.message() << std::endl;
+                            std::cerr << "Error reading author name: " << ec.message() << std::endl;
+                            return;
                         }
 
-                        std::istream is(buf.get());
+                        std::istream is(&buf);
                         std::string temp;
 
                         std::getline(is, temp);
-                        request->m_author = temp.substr(temp.find(' '));
+                        request.m_author = temp.substr(temp.find(' '));
+
+                        std::cout << "Author: " << request.m_author << std::endl;
 
                         // read target
-                        asio::async_read_until(*m_sock.get(), *buf.get(), '\n',
-                        [this, request, buf](const system::error_code &ec, std::size_t bytes_transferred)
+                        asio::async_read_until(*m_sock.get(), buf, '\n',
+                        [this](const system::error_code &ec, std::size_t bytes_transferred)
                         {
                             if(ec.value() != 0)
                             {
-                                std::cerr << "Failed to read from server: " << ec.message() << std::endl;
+                                std::cerr << "Error reading target name: " << ec.message() << std::endl;
+                                return;
                             }
 
-                            std::istream is(buf.get());
+                            std::istream is(&buf);
                             std::string temp;
 
                             std::getline(is, temp);
-                            request->m_target = temp.substr(temp.find(' '));
+                            request.m_target = temp.substr(temp.find(' '));
+
+                            std::cout << "Target: " << request.m_target << std::endl;
 
                             // read content length:
-                            asio::async_read_until(*m_sock.get(), *buf.get(), '\n',
-                            [this, request, buf](const system::error_code &ec, std::size_t bytes_transferred)
+                            asio::async_read_until(*m_sock.get(), buf, '\n',
+                            [this](const system::error_code &ec, std::size_t bytes_transferred)
                             {
                                 if(ec.value() != 0)
                                 {
-                                    std::cerr << "Failed to read from server: " << ec.message() << std::endl;
+                                    std::cerr << "Error reading content-length: " << ec.message() << std::endl;
+                                    return;
                                 }
 
-                                std::istream is(buf.get());
+                                std::istream is(&buf);
                                 std::string temp;
 
                                 std::getline(is, temp);
-                                sscanf(temp.c_str(), "%*s %zu", &request->m_length);
+                                sscanf(temp.c_str(), "%*s %zu", &request.m_length);
 
-                                asio::async_read(*m_sock.get(), *buf.get(), asio::transfer_exactly(request->m_length),
-                                [this, request, buf](const system::error_code &ec, std::size_t bytes_transferred)
+
+                                std::cout << "Content-length: " << request.m_length << std::endl;
+
+                                //read contents.
+                                asio::async_read(*m_sock.get(), buf, asio::transfer_exactly(request.m_length),
+                                [this](const system::error_code &ec, std::size_t bytes_transferred)
                                 {
                                     if(ec.value() != 0)
                                     {
-                                        std::cerr << "Failed to read from server: " << ec.message() << std::endl;
+                                        std::cerr << "Error reading contents of message: " << ec.message() << std::endl;
+                                        return;
+                                    }else if(bytes_transferred != request.m_length)
+                                    {
+
+                                        std::cerr << "Failed to send all bytes:\nTotal bytes: " << request.m_length
+                                                 << "\nBytes sent: " << bytes_transferred << std::endl;
+                                        return;
                                     }
 
-                                    std::istream is(buf.get());
-                                    is >> request->m_message;
+                                    std::istream is(&buf);
+                                    is >> request.m_message;
 
-                                    readComplete(request);
+                                    std::cout << "Message:\n" << request.m_message << std::endl;
+                                    /* readComplete(request); */
                                 });
                             });
                         });
@@ -195,7 +217,7 @@ class TCPClient {
         {
             std::cout << request->m_target << ": " << request->m_message << std::endl;
 
-            readFromServer();
+            /* readFromServer(); */
         }
 
     public:
@@ -249,9 +271,13 @@ class TCPClient {
                         /*         }); */
 
                         std::cout << "Succesfully connected to server..." << std::endl;
-                        /* readFromServer(); */
                     });
 
+        }
+
+        void read()
+        {
+            readFromServer();
         }
 
         /*

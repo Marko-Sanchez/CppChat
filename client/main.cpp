@@ -12,9 +12,13 @@ int main (int argc, char *argv[])
 
         std::this_thread::sleep_for(std::chrono::seconds(5));
 
-        client.serveRequest("server", "Hello Server");
+        client.serveRequest("server", "Hello Serverskdjfsjfasdlkjfhdasjkhfdfjhaskljfhldjfldkjhflajskdh\r\n\r\n");
 
         std::this_thread::sleep_for(std::chrono::seconds(5));
+
+        /* client.read(); */
+
+        /* std::this_thread::sleep_for(std::chrono::seconds(5)); */
 
         client.close();
     }
