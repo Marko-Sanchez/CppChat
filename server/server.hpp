@@ -7,6 +7,7 @@
 #include <iostream>
 #include <memory>
 #include <utility>
+#include <list>
 
 #include "service.hpp"
 #include "Database.hpp"
@@ -22,8 +23,38 @@ class Acceptor
         asio::io_service &m_ios;
         asio::ip::tcp::acceptor m_acceptor;
         std::atomic<bool> m_isStopped;      // TODO: shared_ptr to be given to service to know when to shutdown?
+        std::list<std::pair<std::string, std::unique_ptr<Service>>> clients;
 
-        std::shared_ptr<Database> m_database;
+        /*
+         * When client connects for the first time, parse there first-time request
+         * for clients name.
+         *
+         * parameters:
+         *              sock, shared pointer to tcp::socket belonging to newly connected client.
+         * behavior:
+         *              synchronously waits to read clients message.
+         */
+        void newClient(std::shared_ptr<asio::ip::tcp::socket> sock)
+        {
+            asio::streambuf l_buffer;
+            auto bytes_read = asio::read_until(*sock.get(), l_buffer, "\r\n\r\n");
+            l_buffer.commit(bytes_read);
+
+            std::istream is(&l_buffer);
+            std::string clientName;
+            std::getline(is,clientName);
+
+            // parse "Author: <name>\r"
+            clientName = clientName.substr(clientName.find(' ') + 1);
+            clientName.pop_back();
+
+            auto l_service = std::make_unique<Service>(clientName, sock);
+            l_service->startHandling();
+
+            clients.emplace_back(std::make_pair(clientName, std::move(l_service)));
+
+            std::cout << "Added user " << clientName << " to list..." << std::endl;
+        }
 
         /*
          * Listens for client connections. Creates a socket and once client connects associates
@@ -63,7 +94,8 @@ class Acceptor
             {
                 // TODO: unique pointer and add to database
                 /* std::unique_ptr<Service> t = std::make_unique<Service>(sock); */
-                (new Service(sock)) -> startHandling();
+                /* (new Service(sock)) -> startHandling(); */
+                newClient(sock);
             }
             else
             {
@@ -109,16 +141,23 @@ class Acceptor
         {
             std::cout << "Starting server..." << std::endl;
 
-            m_database = std::make_shared<Database>(Database());
-
             m_acceptor.listen(30);
             initAccept();
         }
 
+        /* Stops server, sets atomic variable to false. */
         void stop()
         {
             std::cout << "Stopping server..." << std::endl;
             m_isStopped.store(true);
+
+            // TODO: iterate through list and stop clients:
+            for(auto &client: clients)
+            {
+                // check that pointer exist
+                if(client.second)
+                    client.second->stop();
+            }
         }
 };
 

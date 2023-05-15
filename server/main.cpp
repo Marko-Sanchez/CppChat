@@ -1,6 +1,7 @@
 #include "server.hpp"
 
 #include <boost/asio.hpp>
+#include <string>
 #include <thread>
 #include <iostream>
 
@@ -13,10 +14,18 @@ int main (int argc, char *argv[])
         AsyncTCPServer server;
         server.start(8080, 2);
 
-        std::this_thread::sleep_for(std::chrono::seconds(10));
-
-        server.stop();
-    }catch(boost::system::system_error &ec)
+        std::string input;
+        while (getline(std::cin, input))
+        {
+            if(input.length() <= 2)
+            {
+                server.stop();
+                break;
+            }
+            input.clear();
+        }
+    }
+    catch(boost::system::system_error &ec)
     {
         std::cout << "Error occured accepting request! Error code =" << ec.code()
             << ". Message: " << ec.what() << std::endl;
