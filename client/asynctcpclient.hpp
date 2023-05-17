@@ -16,9 +16,23 @@
 
 using namespace boost;
 
+/* Container for colored text values to output onto terminal */
+const struct Colors{
+
+    const std::string pass{"\033[0;32m"};
+    const std::string sMsg{"\033[0;36m"};
+    const std::string warning{"\033[0;33m"};
+    const std::string error{"\033[0;31m"};
+
+    const std::string end{"\033[0m"};
+
+}color;
+
 struct Request {
 
-    const std::string m_template{"Author: %s\nTarget: %s\nContent-length: %zu\r\n\r\n%s\r\n\r\n"};
+    /* asio::streambuf m_buffer; */
+
+    const std::string cm_template{"Author: %s\nTarget: %s\nContent-length: %zu\r\n\r\n%s\r\n\r\n"};
     std::string m_author;
     std::string m_target;
     std::string m_message;
@@ -36,48 +50,132 @@ struct Request {
     }
 };
 
-struct Session {
-    asio::ip::tcp::socket m_sock;
-    asio::ip::tcp::endpoint m_ep;
-    std::string m_request;
-
-    asio::streambuf m_response_buf;
-    std::string m_response;
-
-    system::error_code m_ec;
-    bool m_was_cacelled;
-    std::mutex m_cancel_gaurd;
-
-    Session(asio::io_service &ios,
-            const std::string &raw_ip_address,
-            unsigned short port_num,
-            const std::string &request):
-        m_sock(ios),
-        m_ep(asio::ip::address::from_string(raw_ip_address), port_num),
-        m_request(request),
-        m_was_cacelled(false)
-    {}
-};
-
 class TCPClient {
 
     private:
 
+        const std::string cm_username;
+        std::shared_ptr<Request> m_readRequest;
+        Request m_request;
+        asio::streambuf m_buffer;
+
         asio::io_service m_ios;
-        std::mutex m_activeSession;
         std::shared_ptr<asio::ip::tcp::socket> m_sock;
         std::unique_ptr<asio::io_service::work> m_work;
         std::vector<std::unique_ptr<std::thread>> m_threads;
 
-        const std::string m_username;
-        std::atomic_bool m_isClosed;
-
-        Request m_request;
-        asio::streambuf m_buf;
-
-        void errorCheck(const system::error_code ec, std::size_t bytes_transferred)
+        // Add a return variale <int> or some enum, to dictate whether to continue reading or stop
+        // the connections to the client.
+        void errorCheck(const system::error_code &ec, std::size_t bytes_transferred)
         {
+            if(ec == asio::error::operation_aborted)
+            {
+                std::cerr << "Client has canceled operation..." << std::endl;
+            }
+            else if(ec == asio::error::eof && bytes_transferred == 0)
+            {
+                std::cerr << "Server has closed connection..." << std::endl;
+            }
+            else
+            {
+                std::cerr << "Error reading author name: " << ec.message() << std::endl;
+            }
+        }
 
+        Request parseHTTPHeader(asio::streambuf &bufferRequest)
+        {
+            Request l_request;
+            std::istream is(&bufferRequest);
+
+            std::size_t commited{0};
+
+            try
+            {
+                getline(is, l_request.m_author);
+                l_request.m_author = l_request.m_author.substr(l_request.m_author.find(' ') + 1);
+
+                getline(is, l_request.m_target);
+                l_request.m_target = l_request.m_target.substr(l_request.m_target.find(' ') + 1);
+
+                for(char c; is.get(c) && c != '\r';)
+                {
+                    if(std::isdigit(c))
+                    {
+                        l_request.m_length = l_request.m_length * 10 + static_cast<std::size_t>(c % 'a');
+                    }
+                }
+
+                // those last three '\n\r\n' characters will remain in the buffer.
+                m_buffer.consume(3);
+            }catch(std::exception &ec)
+            {
+                std::cerr << ec.what() << std::endl;
+            }
+
+            return l_request;
+        }
+
+        std::string readContents(asio::streambuf &bufferRequest)
+        {
+            std::istream is(&bufferRequest);
+
+            std::string l_message;
+            for(char c; is.get(c);)
+            {
+                l_message.push_back(c);
+            }
+
+            // remove '\r\n\r\n'
+            l_message.erase(l_message.length() - 4);
+
+            return l_message;
+        }
+
+        /*
+         * Process request, then continue reading.
+         *
+         * precondition:
+         *              request must have been fully parsed / read.
+         */
+        void readComplete(Request request)
+        {
+            std::cout << color.sMsg << request.m_author << color.end << ": " << request.m_message << std::endl;
+
+            read();
+        }
+
+        /*
+         * Reads message from server.
+         * behavior:
+         *          continously calls async functions until request is read.
+         */
+        void read()
+        {
+            asio::async_read_until(*m_sock.get(), m_buffer, "\r\n\r\n",
+                    [this](const system::error_code &ec, std::size_t bytes_transferred)
+            {
+                        if(ec.value() != 0)
+                        {
+                            errorCheck(ec, bytes_transferred);
+                            return;
+                        }
+
+                        auto clientRequest = parseHTTPHeader(m_buffer);
+
+                        // Read Contents of message.
+                        asio::async_read_until(*m_sock.get(), m_buffer, "\r\n\r\n",
+                                [this,  clientRequest = std::move(clientRequest)](const system::error_code &ec, std::size_t bytes_transferred) mutable
+                        {
+                                if(ec.value() != 0)
+                                {
+                                    errorCheck(ec, bytes_transferred);
+                                    return;
+                                }
+                                clientRequest.m_message = readContents(m_buffer);
+
+                                readComplete(clientRequest);
+                        });
+            });
         }
 
         /*
@@ -89,7 +187,6 @@ class TCPClient {
          */
         void writeToServer(std::string request)
         {
-            std::cout << request << std::endl;
             asio::async_write(*m_sock.get(), asio::buffer(request),
                     [this, request](const system::error_code &ec, std::size_t bytes_transferred){
                         if(ec.value() != 0)
@@ -106,130 +203,11 @@ class TCPClient {
                     });
         }
 
-        /*
-         * Reads message from server.
-         * behavior:
-         *          continously calls async functions until request is read.
-         */
-        void readFromServer()
-        {
-            std::cout << "Listening for server..." << std::endl;
-            if(m_isClosed.load())
-            {
-                return;
-            }
-
-            // read author
-            asio::async_read_until(*m_sock.get(), m_buf, '\n',
-                    [this](const system::error_code &ec, std::size_t bytes_transferred)
-                    {
-                        if(ec.value() != 0)
-                        {
-                            if(ec == asio::error::operation_aborted)
-                            {
-                                std::cerr << "User has canceled operation..." << std::endl;
-                            }
-                            else if(ec == asio::error::eof && bytes_transferred == 0)
-                            {
-                                std::cerr << "Server has closed connection..." << std::endl;
-                            }
-                            else
-                            {
-                                // other type of erro, related to reading data
-                                std::cerr << "Error reading author name: " << ec.message() << std::endl;
-                            }
-
-                            return;
-                        }
-
-                        std::istream is(&m_buf);
-                        std::string temp;
-
-                        std::getline(is, temp);
-                        m_request.m_author = temp.substr(temp.find(' ') + 1);
-
-                        std::cout << "Author: " << m_request.m_author << std::endl;
-
-                        // read target
-                        asio::async_read_until(*m_sock.get(), m_buf, '\n',
-                        [this](const system::error_code &ec, std::size_t bytes_transferred)
-                        {
-                            if(ec.value() != 0)
-                            {
-                                std::cerr << "Error reading target name: " << ec.message() << std::endl;
-                                return;
-                            }
-
-                            std::istream is(&m_buf);
-                            std::string temp;
-
-                            std::getline(is, temp);
-                            m_request.m_target = temp.substr(temp.find(' ') + 1);
-
-                            std::cout << "Target: " << m_request.m_target << std::endl;
-
-                            // read content length:
-                            asio::async_read_until(*m_sock.get(), m_buf, "\r\n\r\n",
-                            [this](const system::error_code &ec, std::size_t bytes_transferred)
-                            {
-                                if(ec.value() != 0)
-                                {
-                                    std::cerr << "Error reading content-length: " << ec.message() << std::endl;
-                                    return;
-                                }
-
-                                std::istream is(&m_buf);
-                                std::string temp;
-
-                                std::getline(is, temp);
-                                sscanf(temp.c_str(), "%*s %zu", &m_request.m_length);
-
-                                std::cout << "Content-length: " << m_request.m_length << std::endl;
-
-                                //read contents.
-                                asio::async_read_until(*m_sock.get(), m_buf, "\r\n\r\n",
-                                [this](const system::error_code &ec, std::size_t bytes_transferred)
-                                {
-                                    if(ec.value() != 0)
-                                    {
-                                        std::cerr << "Error reading contents of message: " << ec.message() << std::endl;
-                                        return;
-                                    }
-
-                                    std::istream is(&m_buf);
-
-                                    for(char c; is.get(c); )
-                                    {
-                                        m_request.m_message.push_back(c);
-                                    }
-
-                                    std::cout << "Message:\n" << m_request.m_message << std::endl;
-                                    readComplete(m_request);
-                                });
-                            });
-                        });
-                    });
-        }
-
-        /*
-         * Process request.
-         *
-         * precondition:
-         *              request must have been fully parsed / read.
-         */
-        void readComplete(Request request)
-        {
-            std::cout << request.m_author << ": " << request.m_message << std::endl;
-
-            // continue listening.
-            readFromServer();
-        }
 
     public:
 
         TCPClient(std::string user, std::size_t numThreads)
-            :m_username(user),
-            m_isClosed(false)
+            :cm_username(user)
         {
             // keep threads running and listening, when there are no async operations ongoing.
             m_work = std::make_unique<asio::io_service::work>(asio::io_service::work(m_ios));
@@ -257,13 +235,13 @@ class TCPClient {
                             std::cerr << "Failed to connect to server: " << ec.message() << std::endl;
                         }
 
-                        std::cout << "Succesfully connected to server..." << std::endl;
+                        std::cout << color.warning << "Succesfully connected to server..." << color.end << std::endl;
 
                         std::string firstContact{"Author: "};
-                        firstContact.append(m_username);
+                        firstContact.append(cm_username);
                         firstContact.append("\r\n\r\n");
 
-                        std::cout << firstContact << std::endl;
+                        std::cout << color.pass << "Currently Connected as " << cm_username << color.end << std::endl;
 
                         // once connected send message to server.
                         asio::async_write(*m_sock.get(), asio::buffer(firstContact),
@@ -275,7 +253,7 @@ class TCPClient {
                                     }
 
                                     // continuously listen for server.
-                                    readFromServer();
+                                    read();
                                 });
                     });
 
@@ -288,8 +266,8 @@ class TCPClient {
         {
 
             std::cout << "Serving request..." << std::endl;
-            Request request(m_username, target, message);
-            boost::format fmt = boost::format(request.m_template) % request.m_author % request.m_target
+            Request request(cm_username, target, message);
+            boost::format fmt = boost::format(request.cm_template) % request.m_author % request.m_target
                                                                               % request.m_length % request.m_message;
             writeToServer(std::string(fmt.str()));
         }
@@ -301,7 +279,6 @@ class TCPClient {
             m_sock->shutdown(asio::socket_base::shutdown_both);
 
             m_work.reset(nullptr);
-            m_isClosed.store(true);
 
             for(auto &thread: m_threads)
             {
