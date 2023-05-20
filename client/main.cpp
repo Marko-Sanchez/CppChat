@@ -6,7 +6,12 @@ int main (int argc, char *argv[])
 {
     try
     {
-        TCPClient client("marko", 2);
+        std::cout << "Enter client name: ";
+
+        std::string clientName {"marko"};
+        getline(std::cin, clientName);
+
+        TCPClient client(clientName, 2);
 
         client.connect("127.0.0.1", 8080);
 
@@ -20,8 +25,11 @@ int main (int argc, char *argv[])
                 break;
             }
 
-            // write to server.
-            client.serveRequest("server", input);
+            std::cout << "Who do you want to send message to: ";
+            std::string target;
+            getline(std::cin, target);
+
+            client.serveRequest(target, input);
             input.clear();
         }
     }

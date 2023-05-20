@@ -8,9 +8,11 @@
 #include <memory>
 #include <utility>
 #include <list>
+#include <atomic>
+#include <queue>
 
 #include "service.hpp"
-#include "Database.hpp"
+#include "worker.hpp"
 
 using namespace boost;
 
@@ -20,10 +22,14 @@ using namespace boost;
 class Acceptor
 {
     private:
+        using clientInterface = std::pair<std::string, std::unique_ptr<Service>>;
+
         asio::io_service &m_ios;
         asio::ip::tcp::acceptor m_acceptor;
-        std::atomic<bool> m_isStopped;      // TODO: shared_ptr to be given to service to know when to shutdown?
-        std::list<std::pair<std::string, std::unique_ptr<Service>>> clients;
+
+        std::shared_ptr<std::atomic<bool>> m_isServerRunning;
+        std::shared_ptr<std::queue<Request>> m_writeQueue;
+        std::shared_ptr<std::list<clientInterface>> m_clients;
 
         /*
          * When client connects for the first time, parse there first-time request
@@ -48,10 +54,10 @@ class Acceptor
             clientName = clientName.substr(clientName.find(' ') + 1);
             clientName.pop_back();
 
-            auto l_service = std::make_unique<Service>(clientName, sock);
+            auto l_service = std::make_unique<Service>(clientName, sock, m_writeQueue);
             l_service->startHandling();
 
-            clients.emplace_back(std::make_pair(clientName, std::move(l_service)));
+            m_clients->emplace_back(std::make_pair(clientName, std::move(l_service)));
 
             std::cout << "Added user " << clientName << " to list..." << std::endl;
         }
@@ -93,8 +99,6 @@ class Acceptor
             if(ec.value() == 0)
             {
                 // TODO: unique pointer and add to database
-                /* std::unique_ptr<Service> t = std::make_unique<Service>(sock); */
-                /* (new Service(sock)) -> startHandling(); */
                 newClient(sock);
             }
             else
@@ -104,7 +108,7 @@ class Acceptor
             }
 
             // server has not been closed continue processing.
-            if(!m_isStopped.load())
+            if(m_isServerRunning->load())
             {
                 initAccept();
             }
@@ -125,10 +129,12 @@ class Acceptor
          * behavior:
          *          initializes io_service object and binds asio::acceptor object to port and system resources.
          */
-        Acceptor(asio::io_service &ios, unsigned short port_num):
+        Acceptor(asio::io_service &ios, unsigned short port_num, std::shared_ptr<std::list<clientInterface>> &clients, std::shared_ptr<std::queue<Request>> writeQueue, std::shared_ptr<std::atomic<bool>> isServerRunning):
             m_ios(ios),
             m_acceptor(m_ios, asio::ip::tcp::endpoint(asio::ip::address_v4::any(), port_num)),
-            m_isStopped(false)
+            m_clients(clients),
+            m_writeQueue(writeQueue),
+            m_isServerRunning(isServerRunning)
         {}
 
         /*
@@ -149,10 +155,10 @@ class Acceptor
         void stop()
         {
             std::cout << "Stopping server..." << std::endl;
-            m_isStopped.store(true);
+            m_isServerRunning->store(false);
 
-            // TODO: iterate through list and stop clients:
-            for(auto &client: clients)
+            // TODO: m_client, might need a mutex lock since threads are accessing it.
+            for(auto &client: *m_clients.get())
             {
                 // check that pointer exist
                 if(client.second)
@@ -166,10 +172,17 @@ class AsyncTCPServer
 
     private:
 
+        using clientInterface = std::pair<std::string, std::unique_ptr<Service>>;
+
         asio::io_service m_ios;
-        std::unique_ptr<asio::io_service::work> m_work;
         std::unique_ptr<Acceptor> acc;
+        std::unique_ptr<asio::io_service::work> m_work;
         std::vector<std::unique_ptr<std::thread>> m_threadpool;
+
+        // variables shared between threads.
+        std::shared_ptr<std::atomic<bool>> m_isServerRunning;
+        std::shared_ptr<std::queue<Request>> m_writeQueue;
+        std::shared_ptr<std::list<clientInterface>> m_clients;
 
     public:
 
@@ -195,8 +208,11 @@ class AsyncTCPServer
             if(thread_pool_size == 0 || thread_pool_size > 2 * std::thread::hardware_concurrency())
                 thread_pool_size = 2;
 
+            m_isServerRunning = std::make_shared<std::atomic<bool>>(true);
+            m_clients = std::make_shared<std::list<clientInterface>>();
+            m_writeQueue = std::make_shared<std::queue<Request>>();
 
-            acc = std::make_unique<Acceptor>(m_ios, port_num);
+            acc = std::make_unique<Acceptor>(m_ios, port_num, m_clients, m_writeQueue, m_isServerRunning);
             acc->start();
 
             for(unsigned int i{0}; i < thread_pool_size; ++i)
@@ -205,6 +221,10 @@ class AsyncTCPServer
 
                 m_threadpool.push_back(std::move(process));
             }
+
+            // Thread in charge of writing to clients.
+            auto writethread = std::make_unique<std::thread>( [this](){Worker worker(m_writeQueue, m_clients, m_isServerRunning); });
+            m_threadpool.push_back(std::move(writethread));
         }
 
         /*
@@ -215,7 +235,6 @@ class AsyncTCPServer
          */
         void stop()
         {
-
             acc->stop();
             m_ios.stop();
 

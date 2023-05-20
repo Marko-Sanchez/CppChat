@@ -12,12 +12,13 @@
 #include <iostream>
 #include <cstddef>
 #include <memory>
+#include <queue>
 
 using namespace boost;
 
 struct Request
 {
-    const std::string messageTemplate{"Author: %s\nTarget: %s\nContent-length: %zu\r\n\r\n%s"};
+    const std::string messageTemplate{"Author: %s\nTarget: %s\nContent-length: %zu\r\n\r\n%s\r\n\r\n"};
 
     std::string m_author;
     std::string m_target;
@@ -36,6 +37,8 @@ struct Request
     }
 };
 
+// TODO: When client disconnects, remove it from the list of clients.
+
 /*
  * Service is a detached object, that handles reads and writes for a given client. Once
  * done processing client, Service will delete itself.
@@ -48,6 +51,7 @@ class Service
         Request request;
 
         std::shared_ptr<asio::ip::tcp::socket> m_sock;
+        std::shared_ptr<std::queue<Request>> m_writeQueue;
         asio::streambuf m_buffer;
 
         // Add a return variale <int> or some enum, to dictate whether to continue reading or stop
@@ -158,7 +162,9 @@ class Service
          */
         void readComplete(Request readRequest)
         {
-            std::cout << readRequest.m_author << ": " << readRequest.m_message << std::endl;
+            // m_writeQueue->lock();
+            m_writeQueue->push(readRequest);
+            // m_writeQueue->unlock();
 
             // continue reading.
             readFromClient();
@@ -166,22 +172,16 @@ class Service
 
 
         /*
-         * write to the clients target recipient.
+         * Writes to client assioated with this service.
          */
-        void write(std::string &&target)
+        void write(std::string &&sender, std::string &&message)
         {
-            std::cout << "Writing to client..." << std::endl;
-
-            asio::streambuf buf;
-            std::ostream os(&buf);
-
-            Request l_request("server", target, "Hello client");
+            Request l_request(sender, m_clientName, message);
             boost::format fmt = boost::format(l_request.messageTemplate) % l_request.m_author % l_request.m_target
                                 % l_request.m_length % l_request.m_message;
-            std::cout << "Printing out message:\n" << fmt.str() << std::endl;
 
-            asio::async_write(*m_sock.get()/*this would be the other clients socket, placeholder for now*/,
-                             asio::buffer(fmt.str()),
+            std::cout << fmt.str() << std::endl;
+            asio::async_write(*m_sock.get(), asio::buffer(fmt.str()),
                              [this, fmt](const system::error_code &ec, std::size_t bytes_transferred)
                              {
                                 if(ec.value() != 0)
@@ -193,7 +193,7 @@ class Service
                                              << "\nBytes sent: " << bytes_transferred << std::endl;
                                 }
 
-                                std::cout << "Successfully sent client message..." << std::endl;
+                                std::cout << "Successfully sent client message..." << bytes_transferred << std::endl;
                              });
         }
 
@@ -209,9 +209,10 @@ class Service
     public:
 
         /* Constructor, defines socket variable. */
-        Service(std::string clientName, std::shared_ptr<asio::ip::tcp::socket> sock):
+        Service(std::string clientName, std::shared_ptr<asio::ip::tcp::socket> sock, std::shared_ptr<std::queue<Request>> writeQueue):
             m_clientName(clientName),
-            m_sock(sock)
+            m_sock(sock),
+            m_writeQueue(writeQueue)
         {}
 
         /* Start handling client, initially reading from client for there information. */
@@ -226,10 +227,12 @@ class Service
             return m_clientName;
         }
 
-        // TODO: find out who the target or to whom send the message.
-        void writeToTarget(std::string message)
+        /*
+         * Invoked by worker thread, when request is being sent to this client.
+         */
+        void writeToSelf(std::string sender, std::string message)
         {
-            write(std::move(message));
+            write(std::move(sender), std::move(message));
         }
 
         /* Cancels all currently running asynchronous operations. */

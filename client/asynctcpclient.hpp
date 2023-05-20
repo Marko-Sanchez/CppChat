@@ -82,12 +82,15 @@ class TCPClient {
             }
         }
 
+        /*
+         * Parse the HTTP header from the streambuf. This function will return a Request object.
+         * behavior:
+         *         The Request object will contain the author, target, and message.
+         */
         Request parseHTTPHeader(asio::streambuf &bufferRequest)
         {
             Request l_request;
             std::istream is(&bufferRequest);
-
-            std::size_t commited{0};
 
             try
             {
@@ -115,6 +118,11 @@ class TCPClient {
             return l_request;
         }
 
+        /*
+         * Reads contents of message from buffer.
+         * precondition:
+         *             http header must have been read.
+         */
         std::string readContents(asio::streambuf &bufferRequest)
         {
             std::istream is(&bufferRequest);
@@ -171,6 +179,7 @@ class TCPClient {
                                     errorCheck(ec, bytes_transferred);
                                     return;
                                 }
+
                                 clientRequest.m_message = readContents(m_buffer);
 
                                 readComplete(clientRequest);
@@ -206,8 +215,14 @@ class TCPClient {
 
     public:
 
-        TCPClient(std::string user, std::size_t numThreads)
-            :cm_username(user)
+        /*
+         * Constructor.
+         * parameters:
+         *              {std::string} user: username of client.
+         *              {std::size_t} numThreads: number of threads to run.
+         */
+        TCPClient(std::string user, std::size_t numThreads):
+            cm_username(user)
         {
             // keep threads running and listening, when there are no async operations ongoing.
             m_work = std::make_unique<asio::io_service::work>(asio::io_service::work(m_ios));
@@ -220,6 +235,13 @@ class TCPClient {
             }
         }
 
+        /*
+         * Connect to server.
+         * parameters:
+         *              {std::string_view} rawIPAddress: IP address of server.
+         *              {unsigned short} portNum: port number of server.
+         *  TODO: If client fails to connect to server, it should keep trying to connect.
+         */
         void connect(std::string_view rawIPAddress, unsigned short portNum)
         {
             m_sock = std::make_shared<asio::ip::tcp::socket>(asio::ip::tcp::socket(m_ios));
