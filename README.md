@@ -1,17 +1,10 @@
-# CppChat
-![cpp](https://img.shields.io/badge/C++-17-blue) ![boost](https://img.shields.io/badge/Boost.Asio-orange) ![Linux](https://img.shields.io/badge/Linux-Ubuntu-critical) ![gui](https://img.shields.io/badge/GUI-QT-lightgreen)
+# cpp-chat ![networking](https://img.shields.io/badge/networking-boost.asio-orange) ![gui](https://img.shields.io/badge/GUI-QT6-lightgreen) [![wakatime](https://wakatime.com/badge/user/f6244e02-6622-43fe-a0a9-cdbfd95dfe72/project/93fab725-7d3b-457d-8809-aa20b6d1e6f9.svg)](https://wakatime.com/badge/user/f6244e02-6622-43fe-a0a9-cdbfd95dfe72/project/93fab725-7d3b-457d-8809-aa20b6d1e6f9)
+A C++ GUI desktop messaging application, were multiple users are able to communicate with each other. Designed to be cross-platform.
 
-A server-client asynchronous application using Transmission Control Protocol, developed in cpp using Boost.Asio for networking and QT as the GUI.
+## Details
+Application uses c++-23 and cmake version (2.25.0)+. Currently in the process of a refractoring.
 
-## GOALS
-----
-### Networking
-1. Build asynchronous server.
-2. Build asynchronous client.
-3. Develop server-client communication standard.
-4. Test communication with various clients.
-5. Build local database for better caching.
-
-### User interface
-1. Test simple gui with QT.
-2. Attach user events with backend.
+### Protocol
+### Transport
+### Server
+### Client
