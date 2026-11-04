@@ -68,14 +68,34 @@ namespace protocol
         return static_cast<std::uint8_t>(std::visit([](const auto& msg){return msg.type;}, m));
     }
 
-    inline std::optional<MessageType> UintToMessage(std::uint8_t id)
+    inline std::optional<Message> UintToMessage(std::uint8_t id)
     {
-        if (id >= k_messageTypeCount || 0 > id)
+        if (id >= k_messageTypeCount)
         {
             return std::nullopt;
         }
 
-        return MessageType {id};
+        MessageType type {id};
+        switch (type)
+        {
+            case MessageType::PING:
+                return Ping {};
+
+            case MessageType::LOGIN:
+                return Login {};
+
+            case MessageType::JOINED:
+                return Joined {};
+
+            case MessageType::MESSAGETOGLOBAL:
+                return MessageToGlobal {};
+
+            case MessageType::MESSAGEFROMGLOBAL:
+                return MessageFromGlobal {};
+
+            case MessageType::ERROR:
+                return MessageError {};
+        }
     }
 
 }// namespace protocol
