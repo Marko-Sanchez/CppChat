@@ -1,6 +1,7 @@
 #ifndef PROTOCOL_CODEC
 #define PROTOCOL_CODEC
 
+#include <charconv>
 #include <cstdint>
 #include <expected>
 #include <span>
@@ -33,11 +34,34 @@ namespace protocol
         }
     }
 
+    inline std::uint32_t get_u32(std::span<const std::byte> b)
+    {
+        return
+        {
+            0u
+            | std::to_integer<std::uint32_t>(b[0] << 24)
+            | std::to_integer<std::uint32_t>(b[1] << 16)
+            | std::to_integer<std::uint32_t>(b[2] << 8)
+            | std::to_integer<std::uint32_t>(b[3])
+        };
+    }
+
     // convert string into bytes and add to byte array.
     inline void put_str(Bytes& bytes, const std::string& s)
     {
         const auto payloadBytes = std::as_bytes(std::span {s});
         bytes.insert(bytes.end(), payloadBytes.begin(), payloadBytes.end());
+    }
+
+    // converts bytes to a string, updating the byte span.
+    inline std::string get_str(std::span<const std::byte>& b)
+    {
+        auto length {get_u32(b)};
+        std::string payload (b, length);
+
+        b = b.subspan(4 + length);
+
+        return payload;
     }
 
     inline void write(Bytes&, const Ping&)
@@ -76,6 +100,35 @@ namespace protocol
         put_str(b, msg.error);
     }
 
+    inline void read(std::span<const std::byte> b, Ping& msg)
+    { }
+
+    inline void read(std::span<const std::byte> b, Login& msg)
+    {
+        msg.user = get_str(b);
+    }
+
+    inline void read(std::span<const std::byte> b, Joined& msg)
+    {
+        msg.user = get_str(b);
+    }
+
+    inline void read(std::span<const std::byte> b, MessageToGlobal& msg)
+    {
+        msg.text = get_str(b);
+    }
+
+    inline void read(std::span<const std::byte> b, MessageFromGlobal& msg)
+    {
+        msg.user = get_str(b);
+        msg.text = get_str(b);
+    }
+
+    inline void read(std::span<const std::byte> b, MessageError& msg)
+    {
+        msg.error = get_str(b);
+    }
+
     // [message type][payload length][payload]
     // 1 bytes       4 bytes          (payload length) bytes
 
@@ -93,12 +146,13 @@ namespace protocol
         return out;
     }
 
-    inline std::expected<Message, DecodeError> decode(std::span<std::byte> in)
+    // todo: add error handling, to read and get functions.
+    inline std::expected<Message, DecodeError> decode(std::span<const std::byte> in)
     {
-        // TODO:
-        // Get the message type.
-        // Get the payload length.
-        // Payload.
+        auto message {UintToMessage(static_cast<std::uint8_t>(in[0]))};
+        read(in.subspan(1), message);
+
+        return message;
     }
 }// namespace protocol
 #endif
