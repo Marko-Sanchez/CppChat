@@ -1,7 +1,6 @@
-#ifndef PROTOCOL_CODEC
-#define PROTOCOL_CODEC
+#ifndef PROTOCOL_CODEC_H
+#define PROTOCOL_CODEC_H
 
-#include <charconv>
 #include <cstdint>
 #include <expected>
 #include <span>
@@ -9,6 +8,7 @@
 #include <cstddef>
 
 #include "messaging.h"
+#include "byteserdes.h"
 
 namespace protocol
 {
@@ -24,135 +24,101 @@ namespace protocol
         std::string error;
     };
 
-    // Payload length size is four bytes, so it need to be broken down; otherwise, when casting to std::byte the
-    // top 3 bytes get cropped off; top-most byte gets pushed into array first.
-    inline void put_u32(Bytes& b, std::uint32_t length)
-    {
-        for (int shift {24}; shift >= 0; shift -= 8)
-        {
-            b.push_back(static_cast<std::byte>(length >> shift));
-        }
-    }
-
-    inline std::uint32_t get_u32(std::span<const std::byte> b)
-    {
-        return
-        {
-            0u
-            | std::to_integer<std::uint32_t>(b[0] << 24)
-            | std::to_integer<std::uint32_t>(b[1] << 16)
-            | std::to_integer<std::uint32_t>(b[2] << 8)
-            | std::to_integer<std::uint32_t>(b[3])
-        };
-    }
-
-    // convert string into bytes and add to byte array.
-    inline void put_str(Bytes& bytes, const std::string& s)
-    {
-        const auto payloadBytes = std::as_bytes(std::span {s});
-        bytes.insert(bytes.end(), payloadBytes.begin(), payloadBytes.end());
-    }
-
-    // converts bytes to a string, updating the byte span.
-    inline std::string get_str(std::span<const std::byte>& b)
-    {
-        auto length {get_u32(b)};
-        std::string payload (b, length);
-
-        b = b.subspan(4 + length);
-
-        return payload;
-    }
-
-    inline void write(Bytes&, const Ping&)
+    inline void write(ByteWriter&, const Ping&)
     { };
 
-    inline void write(Bytes& b, const Login& msg)
+    inline void write(ByteWriter& bw, const Login& msg)
     {
-        put_u32(b, static_cast<std::uint32_t>(msg.user.length()));
-        put_str(b, msg.user);
+        bw.WriteField(msg.user);
     }
 
-    inline void write(Bytes& b, const Joined& msg)
+    inline void write(ByteWriter& bw, const Joined& msg)
     {
-        put_u32(b, static_cast<std::uint32_t>(msg.user.length()));
-        put_str(b, msg.user);
+        bw.WriteField(msg.user);
     }
 
-    inline void write(Bytes& b, const MessageToGlobal& msg)
+    inline void write(ByteWriter& bw, const MessageToGlobal& msg)
     {
-        put_u32(b, msg.text.length());
-        put_str(b, msg.text);
+        bw.WriteField(msg.text);
     }
 
-    inline void write(Bytes& b, const MessageFromGlobal& msg)
+    inline void write(ByteWriter& bw, const MessageFromGlobal& msg)
     {
-        put_u32(b, msg.user.length());
-        put_str(b, msg.user);
-
-        put_u32(b, msg.text.length());
-        put_str(b, msg.text);
+        bw.WriteField(msg.user);
+        bw.WriteField(msg.text);
     }
 
-    inline void write(Bytes& b, const MessageError& msg)
+    inline void write(ByteWriter& bw, const MessageError& msg)
     {
-        put_u32(b, msg.error.length());
-        put_str(b, msg.error);
+        bw.WriteField(msg.error);
     }
 
-    inline void read(std::span<const std::byte> b, Ping& msg)
+    inline void read(ByteReader& br, Ping& msg)
     { }
 
-    inline void read(std::span<const std::byte> b, Login& msg)
+    inline void read(ByteReader& br, Login& msg)
     {
-        msg.user = get_str(b);
+        msg.user = br.ReadField();
     }
 
-    inline void read(std::span<const std::byte> b, Joined& msg)
+    inline void read(ByteReader& br, Joined& msg)
     {
-        msg.user = get_str(b);
+        msg.user = br.ReadField();
     }
 
-    inline void read(std::span<const std::byte> b, MessageToGlobal& msg)
+    inline void read(ByteReader& br, MessageToGlobal& msg)
     {
-        msg.text = get_str(b);
+        msg.text = br.ReadField();
     }
 
-    inline void read(std::span<const std::byte> b, MessageFromGlobal& msg)
+    inline void read(ByteReader& br, MessageFromGlobal& msg)
     {
-        msg.user = get_str(b);
-        msg.text = get_str(b);
+        msg.user = br.ReadField();
+        msg.text = br.ReadField();
     }
 
-    inline void read(std::span<const std::byte> b, MessageError& msg)
+    inline void read(ByteReader& br, MessageError& msg)
     {
-        msg.error = get_str(b);
+        msg.error = br.ReadField();
     }
-
-    // [message type][payload length][payload]
-    // 1 bytes       4 bytes          (payload length) bytes
 
     inline std::expected<Bytes, EncodeError> encode(const Message& msg)
     {
-        Bytes out;
-        out.push_back(static_cast<std::byte>(MessageToUint(msg)));
+        try
+        {
+            ByteWriter bytewriter (msg);
+            std::visit([&bw = bytewriter](const auto& x)
+                    {
+                        write(bw, x);
+                    },
+                    msg);
 
-        std::visit([&o = out](const auto& x)
-                {
-                    write(o, x);
-                },
-                msg);
-
-        return out;
+            return bytewriter.GetBytes();
+        }
+        catch (const std::exception& error)
+        {
+            return std::unexpected(EncodeError{.error = error.what()});
+        }
     }
 
-    // todo: add error handling, to read and get functions.
     inline std::expected<Message, DecodeError> decode(std::span<const std::byte> in)
     {
-        auto message {UintToMessage(static_cast<std::uint8_t>(in[0]))};
-        read(in.subspan(1), message);
+        try
+        {
+            ByteReader bytereader (in);
+            auto message = bytereader.CreateMessageObject();
+            std::visit([&br = bytereader](auto& x)
+                    {
+                        read(br, x);
+                    },
+                    message);
 
-        return message;
+            return std::move(message);
+        }
+        catch (const std::exception& error)
+        {
+            return std::unexpected(DecodeError{.error = error.what()});
+        }
     }
 }// namespace protocol
 #endif

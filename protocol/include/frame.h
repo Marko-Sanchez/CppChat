@@ -5,6 +5,7 @@
 #include <stdexcept>
 #include <format>
 
+#include "byteprimitives.h"
 #include "messaging.h"
 
 namespace protocol
@@ -12,71 +13,47 @@ namespace protocol
     inline constexpr std::uint32_t k_FrameHeaderSize {5};
     inline constexpr std::uint32_t k_MaxFrameSize    {1024};
 
-    /*
-     * Frame header parses the first k_FrameHeaderSize bytes; modifying the byte stream.
-     */
-    struct FrameHeader
+    inline Message GetMessageObject(std::uint8_t messageType)
     {
-        std::uint8_t  _messageType;
-        std::uint32_t _frameSize;
-
-        FrameHeader(std::span<const std::byte>& bytes)
+        if (auto messageOption = UintToMessage(messageType); messageOption)
         {
-            if (bytes.size() < k_FrameHeaderSize)
-            {
-                throw std::runtime_error(std::format("Frame header needs {} bytes got {}.", k_FrameHeaderSize, bytes.size()));
-            }
-
-            auto _header = bytes.first(k_FrameHeaderSize);
-
-            _messageType = static_cast<std::uint8_t>(_header[0]);
-            _frameSize   = 0u
-            | (std::to_integer<std::uint32_t>(_header[1]) << 24)
-            | (std::to_integer<std::uint32_t>(_header[2]) << 16)
-            | (std::to_integer<std::uint32_t>(_header[3]) << 8)
-            |  std::to_integer<std::uint32_t>(_header[4]);
-
-            if (_frameSize > k_MaxFrameSize)
-            {
-                throw std::length_error(std::format("Frame overflow, got: {} expected: <{}", _frameSize, k_MaxFrameSize));
-            }
-            // Note: _frameSize only counts network packets, not frame header.
-            else if (_frameSize > (bytes.size() - k_FrameHeaderSize))
-            {
-                throw std::length_error(std::format("Not enough bytes in stream, expected: {} got: {}", _frameSize, bytes.size()));
-            }
-            else if (_frameSize < (bytes.size() - k_FrameHeaderSize))
-            {
-                throw std::length_error(std::format("More bytes in stream then expected, expected: {} got: {}", _frameSize, bytes.size()));
-            }
-
-            bytes = bytes.subspan(k_FrameHeaderSize);
+            return messageOption.value();
         }
 
-        Message GetMessageObject() const
-        {
-            auto messgeOption = UintToMessage(_messageType);
-            if (!messgeOption)
-            {
-                throw std::invalid_argument("Message type invalid.");
-            }
+        throw std::invalid_argument("Message type invalid.");
+    }
 
-            return messgeOption.value();
+    // Validates header bytes; throws if malformed.
+    inline std::pair<std::uint8_t, std::uint32_t> read_frame_header(std::span<const std::byte> b)
+    {
+        if (bytes.size() < k_FrameHeaderSize)
+        {
+            throw std::runtime_error(std::format("Frame header needs {} bytes got {}.", k_FrameHeaderSize, bytes.size()));
         }
 
-        std::vector<std::byte> GetFrameBytes() const
+        // check if type is valid.
+        std::uint8_t messageType = static_cast<std::uint8_t>(b[0]);
+        GetMessageObject(messageType);
+
+        std::uint32_t frameSize = read_u32(b.subspan(1));
+        if (frameSize > k_MaxFrameSize)
         {
-            std::vector<std::byte> v;
-            v.push_back(static_cast<std::byte>(_messageType));
-
-            v.push_back(static_cast<std::byte>(_frameSize >> 24));
-            v.push_back(static_cast<std::byte>(_frameSize >> 16));
-            v.push_back(static_cast<std::byte>(_frameSize >> 8));
-            v.push_back(static_cast<std::byte>(_frameSize));
-
-            return v;
+            throw std::length_error(std::format("Frame overflow, got: {} expected: <{}", frameSize, k_MaxFrameSize));
         }
-    };
+
+        return {messageType, frameSize};
+    }
+
+    inline std::vector<std::byte> write_frame_header(std::uint8_t type, std::uint32_t framesize)
+    {
+        std::vector<std::byte> out;
+
+        out.reserve(k_FrameHeaderSize);
+        out.push_back(static_cast<std::byte>(type));
+        out.append_range(write_u32(framesize));
+
+        return out;
+    }
 
 }// namespace protocol
 #endif
