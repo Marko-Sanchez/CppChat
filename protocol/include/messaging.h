@@ -1,5 +1,5 @@
-#ifndef PROTOCOL_MESSAGING
-#define PROTOCOL_MESSAGING
+#ifndef PROTOCOL_MESSAGING_H
+#define PROTOCOL_MESSAGING_H
 
 #include <string>
 #include <optional>
@@ -8,7 +8,7 @@
 
 namespace protocol
 {
-    inline constexpr std::uint8_t k_messageTypeCount {6};
+    inline constexpr std::uint8_t k_MessageTypeCount {6};
 
     /*
      * Header containing all possible messages between Server and Client.
@@ -22,7 +22,7 @@ namespace protocol
         MESSAGEFROMGLOBAL,
         ERROR
     };
-    static_assert(static_cast<std::uint8_t>(MessageType::ERROR) == k_messageTypeCount - 1);
+    static_assert(static_cast<std::uint8_t>(MessageType::ERROR) == k_MessageTypeCount - 1);
 
     struct Ping
     {
@@ -61,7 +61,7 @@ namespace protocol
     };
 
     using Message = std::variant<Ping, Login, Joined, MessageToGlobal, MessageFromGlobal, MessageError>;
-    static_assert(std::variant_size_v<Message> == k_messageTypeCount, "Message types and variant size must match.");
+    static_assert(std::variant_size_v<Message> == k_MessageTypeCount, "Message types and variant size must match.");
 
     inline std::uint8_t MessageToUint(const Message& m)
     {
@@ -70,7 +70,7 @@ namespace protocol
 
     inline std::optional<Message> UintToMessage(std::uint8_t id)
     {
-        if (id >= k_messageTypeCount)
+        if (id >= k_MessageTypeCount)
         {
             return std::nullopt;
         }
