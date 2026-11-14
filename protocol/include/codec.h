@@ -1,7 +1,6 @@
 #ifndef PROTOCOL_CODEC_H
 #define PROTOCOL_CODEC_H
 
-#include <cstdint>
 #include <expected>
 #include <span>
 #include <vector>
@@ -93,7 +92,7 @@ namespace protocol
                     },
                     msg);
 
-            return bytewriter.GetBytes();
+            return std::move(bytewriter).GetBytes();
         }
         catch (const std::exception& error)
         {
