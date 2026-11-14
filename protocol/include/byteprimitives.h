@@ -30,14 +30,11 @@ namespace protocol
 
     inline std::uint32_t read_u32(std::span<const std::byte> b)
     {
-        return
-        {
-            0u
+        return 0u
             | (std::to_integer<std::uint32_t>(b[0]) << 24)
             | (std::to_integer<std::uint32_t>(b[1]) << 16)
             | (std::to_integer<std::uint32_t>(b[2]) << 8)
-            | std::to_integer<std::uint32_t>(b[3])
-        };
+            | std::to_integer<std::uint32_t>(b[3]);
     }
 
     inline std::vector<std::byte> write_str(const std::string& str)
