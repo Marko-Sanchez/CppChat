@@ -3,5 +3,5 @@ add_library(cppchat::protocol ALIAS cppchat-protocol)
 
 target_include_directories(cppchat-protocol
     INTERFACE
-        include
+        ${CMAKE_CURRENT_SOURCE_DIR}/include
 )
