@@ -10,6 +10,9 @@
 
 namespace protocol
 {
+    /*
+     * Handles Frame Header contents: Encoding, Decoding, and validating header content.
+     */
     inline constexpr std::uint32_t k_FrameHeaderSize {5};
     inline constexpr std::uint32_t k_MaxFrameSize    {1024};
 
@@ -17,28 +20,31 @@ namespace protocol
     {
         if (auto messageOption = UintToMessage(messageType); messageOption)
         {
-            return messageOption.value();
+            return std::move(messageOption.value());
         }
 
         throw std::invalid_argument("Message type invalid.");
     }
 
-    // Validates header bytes; throws if malformed.
     inline std::pair<std::uint8_t, std::uint32_t> read_frame_header(std::span<const std::byte> b)
     {
-        if (bytes.size() < k_FrameHeaderSize)
+        if (b.size() < k_FrameHeaderSize)
         {
-            throw std::runtime_error(std::format("Frame header needs {} bytes got {}.", k_FrameHeaderSize, bytes.size()));
+            throw std::runtime_error(std::format("Frame header needs {} bytes got {}.", k_FrameHeaderSize, b.size()));
         }
 
-        // check if type is valid.
-        std::uint8_t messageType = static_cast<std::uint8_t>(b[0]);
+        const std::uint8_t messageType = static_cast<std::uint8_t>(b[0]);
+        const std::uint32_t frameSize  = read_u32(b.subspan(1));
+
         GetMessageObject(messageType);
 
-        std::uint32_t frameSize = read_u32(b.subspan(1));
         if (frameSize > k_MaxFrameSize)
         {
             throw std::length_error(std::format("Frame overflow, got: {} expected: <{}", frameSize, k_MaxFrameSize));
+        }
+        if (auto buffersize = static_cast<std::uint32_t>(b.size()) - k_FrameHeaderSize; buffersize != frameSize)
+        {
+            throw std::length_error(std::format("Buffer ({}) frame size ({}) mismatch.", buffersize, frameSize));
         }
 
         return {messageType, frameSize};
