@@ -1,7 +1,7 @@
 cmake_minimum_required(VERSION 3.25.0)
 
 project(cppchat
-    VERSION "0.0.0"
+    VERSION "1.0.0"
     LANGUAGES CXX
     DESCRIPTION "A C++ desktop messaging application."
     HOMEPAGE_URL "https://github.com/Marko-Sanchez/CppChat"
@@ -22,7 +22,7 @@ find_package(Git QUIET)
 find_package(Threads REQUIRED)
 find_package(Boost 1.83 REQUIRED)
 
-# add_subdirectory(protocol)
+add_subdirectory(protocol)
 # add_subdirectory(transport)
 
 if(CHAT_BUILD_SERVER)
