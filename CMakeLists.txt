@@ -1,7 +1,7 @@
 cmake_minimum_required(VERSION 3.25.0)
 
 project(cppchat
-    VERSION "1.0.1"
+    VERSION "1.1.0"
     LANGUAGES CXX
     DESCRIPTION "A C++ desktop messaging application."
     HOMEPAGE_URL "https://github.com/Marko-Sanchez/CppChat"
@@ -15,8 +15,8 @@ set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
 set(THREADS_PREFER_PTHREAD_FLAG TRUE)
 
-option(CHAT_BUILD_SERVER "Build the headless server" OFF)
-option(CHAT_BUILD_CHAT "Build the QT client" OFF)
+option(BUILD_SERVER "Build the headless server" OFF)
+option(BUILD_CHAT "Build the QT client" OFF)
 
 find_package(Git QUIET)
 find_package(Threads REQUIRED)
@@ -42,9 +42,9 @@ configure_file(
 add_subdirectory(protocol)
 # add_subdirectory(transport)
 
-if(CHAT_BUILD_SERVER)
+if(BUILD_SERVER)
     add_subdirectory(server)
 endif()
-if(CHAT_BUILD_CHAT)
+if(BUILD_CHAT)
     add_subdirectory(client)
 endif()

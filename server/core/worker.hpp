@@ -1,6 +1,8 @@
-#ifndef WORKER
-#define WORKER
+#ifndef WORKER_H
+#define WORKER_H
 
+#include <iostream>
+#include <print>
 #include <thread>
 #include <memory>
 #include <queue>
@@ -8,6 +10,8 @@
 
 #include "service.hpp"
 
+namespace server::core
+{
 class Worker
 {
     private:
@@ -31,7 +35,7 @@ class Worker
                 }
                 else
                 {
-                    std::cout << "Processing request" << std::endl;
+                    std::println("Processing request...");
                     // pop client request from queue
                     // m_writeQueue->getLock();
                     if(!m_writeQueue->empty())
@@ -49,11 +53,11 @@ class Worker
                         // if client is found, send message to it's socket.
                         if(l_client != m_clientList->end())
                         {
-                            l_client->second->writeToSelf(l_request.m_author, l_request.m_message);
+                            l_client->second->WriteToSelf(l_request.m_author, l_request.m_message);
                         }
                         else
                         {
-                            std::cerr << "Client " << l_request.m_target << " not found" << std::endl;
+                            std::println(std::cerr, "Client ({}) not found.", l_request.m_target);
                         }
                     }
                 }// end else
@@ -70,5 +74,5 @@ class Worker
             work();
         }
 };
-
+}// namespace core
 #endif

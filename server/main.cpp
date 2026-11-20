@@ -1,34 +1,29 @@
-#include "server.hpp"
+#include <cstdio>
+#include <print>
 
-#include <boost/asio.hpp>
-#include <string>
-#include <thread>
-#include <iostream>
+#include <boost/system.hpp>
+
+#include "cppchat.h"
+#include "commandlineparser.h"
+#include "server.hpp"
 
 int main (int argc, char *argv[])
 {
-    unsigned short port_num{8080};
+    utility::CommandLineArgs args = utility::ParseArgs(argc, argv);
+    if (args.showversion)
+    {
+        std::println("cppchat-server {} ({})", CPPCHAT_VERSION, CPPCHAT_GIT_HASH);
+        return 0;
+    }
 
     try
     {
-        AsyncTCPServer server;
-        server.start(8080, 2);
-
-        std::string input;
-        while (getline(std::cin, input))
-        {
-            if(input.length() <= 2)
-            {
-                server.stop();
-                break;
-            }
-            input.clear();
-        }
+        server::core::AsyncTCPServer server;
+        server.Run(args.port, 2);
     }
     catch(boost::system::system_error &ec)
     {
-        std::cout << "Error occured accepting request! Error code =" << ec.code()
-            << ". Message: " << ec.what() << std::endl;
+        std::println(stderr, "Error occured accepting request! Message: {}", ec.what());
     }
 
     return 0;
